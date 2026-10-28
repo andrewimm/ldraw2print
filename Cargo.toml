@@ -5,6 +5,7 @@ edition = "2021"
 rust-version = "1.88"
 description = "Convert LDraw parts into 3D-printable models, focused on scaled-up minifigure accessories"
 license = "MIT"
+repository = "https://github.com/andrewimm/ldraw2print"
 readme = "README.md"
 keywords = ["ldraw", "lego", "3d-printing", "stl", "3mf"]
 categories = ["command-line-utilities", "graphics"]

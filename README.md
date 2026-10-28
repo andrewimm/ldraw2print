@@ -52,12 +52,33 @@ text lives in [`docs/guide/`](docs/guide/).
 
 ## Install
 
+Prebuilt binaries for Linux (x86_64, aarch64) and macOS (Apple Silicon and
+Intel in one binary) are on the
+[releases page](https://github.com/andrewimm/ldraw2print/releases). Download
+the archive for your system, unpack it and put `ldraw2print` on your PATH:
+
+```bash
+tar -xzf ldraw2print-*-macos.tar.gz          # or …-linux-x86_64 / …-linux-aarch64
+mv ldraw2print-*/ldraw2print ~/.local/bin/   # any directory on your PATH
+ldraw2print --version
+```
+
+The macOS binary is not notarised by Apple. If you downloaded it with a
+browser and macOS refuses to open it, clear the quarantine flag:
+`xattr -d com.apple.quarantine ~/.local/bin/ldraw2print`.
+
+Each archive has signed build provenance; check one with
+`gh attestation verify <archive> --repo andrewimm/ldraw2print`.
+
+### From source
+
 Requires Rust 1.88 or newer (rustup picks up the pinned version from `rust-toolchain.toml`).
 
 ```bash
-cargo install --path .        # installs `ldraw2print` into ~/.cargo/bin
-# or
-cargo build --release         # binary at target/release/ldraw2print
+cargo install --git https://github.com/andrewimm/ldraw2print --locked
+# or, from a clone:
+cargo install --path . --locked   # installs `ldraw2print` into ~/.cargo/bin
+cargo build --release             # binary at target/release/ldraw2print
 ```
 
 The preview's Three.js (r160, MIT, `assets/vendor/`) is compiled into the

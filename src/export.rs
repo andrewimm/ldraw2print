@@ -267,8 +267,9 @@ impl Exporter for ThreeMf {
 /// Multicolour 3MF as **one solid with painted faces**, which is how LDraw
 /// printed patterns are modelled (coloured patches of one closed surface).
 ///
-/// The most-used colour is filament 1; triangles of every other colour are
-/// painted with filament 2, 3, … using:
+/// The colour covering the most surface area is filament 1 (unpainted, and
+/// what the slicer uses for the inside of the part); triangles of every
+/// other colour are painted with filament 2, 3, … using:
 /// * `paint_color` — Bambu Studio / OrcaSlicer per-triangle filament paint,
 /// * `slic3rpe:mmu_segmentation` — PrusaSlicer's equivalent attribute,
 /// * core-spec `pid`/`p1` base materials, so any 3MF viewer shows colours.
@@ -278,11 +279,41 @@ impl Exporter for ThreeMf {
 /// single hex digit `n << 2`; larger states use an escape nibble.
 pub struct PaintedThreeMf;
 
-/// Filament assignment used by [`PaintedThreeMf`]: (colour code, triangles), filament = index + 1.
-pub fn paint_filaments(model: &PrintModel) -> Vec<(u32, usize)> {
-    let mut regions = model.color_regions();
-    regions.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
-    regions
+/// One filament of a painted 3MF.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Filament {
+    pub code: u32,
+    pub triangles: usize,
+    /// Surface area in this colour, mm².
+    pub area_mm2: f64,
+}
+
+/// Filament assignment used by [`PaintedThreeMf`]; filament = index + 1.
+///
+/// Ordered by surface area, not triangle count: printed linework is many
+/// tiny triangles, and the base filament also fills the part's interior,
+/// so it must be the colour of the body (a map tile's fine black outlines
+/// outnumber its few large white faces).
+pub fn paint_filaments(model: &PrintModel) -> Vec<Filament> {
+    let mut out: Vec<Filament> = Vec::new();
+    let p = &model.mesh.positions;
+    for t in &model.mesh.tris {
+        let [a, b, c] = t.v.map(|i| p[i as usize]);
+        let area = 0.5 * (b - a).cross(c - a).length();
+        match out.iter_mut().find(|f| f.code == t.color) {
+            Some(f) => {
+                f.triangles += 1;
+                f.area_mm2 += area;
+            }
+            None => out.push(Filament {
+                code: t.color,
+                triangles: 1,
+                area_mm2: area,
+            }),
+        }
+    }
+    out.sort_by(|a, b| b.area_mm2.total_cmp(&a.area_mm2).then(a.code.cmp(&b.code)));
+    out
 }
 
 /// TriangleSelector code for a leaf triangle in `state` (filament index).
@@ -308,15 +339,18 @@ impl Exporter for PaintedThreeMf {
             "{} colours; painted 3MF supports at most 16 filaments",
             filaments.len()
         );
-        let slot = |code: u32| filaments.iter().position(|(c, _)| *c == code).unwrap();
+        let slot = |code: u32| filaments.iter().position(|f| f.code == code).unwrap();
         let mapping: Vec<String> = filaments
             .iter()
             .enumerate()
-            .map(|(i, (c, n))| {
+            .map(|(i, f)| {
                 format!(
-                    "filament {}: {} ({c}), {n} triangles",
+                    "filament {}: {} ({}), {} triangles, {:.0} mm²",
                     i + 1,
-                    model.colors.name(*c)
+                    model.colors.name(f.code),
+                    f.code,
+                    f.triangles,
+                    f.area_mm2
                 )
             })
             .collect();
@@ -334,11 +368,12 @@ impl Exporter for PaintedThreeMf {
             xml_escape(&mapping.join("; "))
         ));
         xml.push_str("  <resources>\n    <basematerials id=\"1\">\n");
-        for (code, _) in &filaments {
-            let c = model.colors.rgba(*code);
+        for f in &filaments {
+            let code = f.code;
+            let c = model.colors.rgba(code);
             xml.push_str(&format!(
                 "      <base name=\"{}\" displaycolor=\"#{:02X}{:02X}{:02X}{:02X}\"/>\n",
-                xml_escape(&format!("{} ({code})", model.colors.name(*code))),
+                xml_escape(&format!("{} ({code})", model.colors.name(code))),
                 c[0],
                 c[1],
                 c[2],
@@ -464,6 +499,50 @@ fn stored_zip(files: &[(&str, &[u8])]) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn base_filament_is_largest_area_not_most_triangles() {
+        use crate::geometry::Vec3;
+        use crate::mesh::Tri;
+        // One big white triangle (area 50) and ten tiny black ones (area 0.5 each).
+        let mut positions = vec![
+            Vec3::new(0.0, 0.0, 0.0),
+            Vec3::new(10.0, 0.0, 0.0),
+            Vec3::new(0.0, 10.0, 0.0),
+        ];
+        let mut tris = vec![Tri {
+            v: [0, 1, 2],
+            color: 15,
+            oriented: true,
+            file: 0,
+        }];
+        for k in 0..10 {
+            let o = positions.len() as u32;
+            let x = 20.0 + k as f64 * 2.0;
+            positions.extend([
+                Vec3::new(x, 0.0, 0.0),
+                Vec3::new(x + 1.0, 0.0, 0.0),
+                Vec3::new(x, 1.0, 0.0),
+            ]);
+            tris.push(Tri {
+                v: [o, o + 1, o + 2],
+                color: 0,
+                oriented: true,
+                file: 0,
+            });
+        }
+        let mesh = Mesh { positions, tris };
+        let colors = crate::ldraw::ColorTable::builtin();
+        let model = PrintModel {
+            name: "t".into(),
+            mesh: &mesh,
+            colors: &colors,
+        };
+        let f = paint_filaments(&model);
+        assert_eq!((f[0].code, f[0].triangles), (15, 1));
+        assert!((f[0].area_mm2 - 50.0).abs() < 1e-9);
+        assert_eq!((f[1].code, f[1].triangles), (0, 10));
+    }
 
     #[test]
     fn paint_codes_match_bambu_files() {

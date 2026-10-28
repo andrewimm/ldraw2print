@@ -19,6 +19,14 @@ Heads and caps: print upright as output (a head's neck hole down, a cap's
 peak supported). The socket ceiling inside a head or cap is a short bridge;
 nothing hangs in mid-air.
 
+Printed tiles and other flat patterned faces: print the pattern face UP
+(no `--flip`), even though the hollow underside then needs support.
+Verified with Bambu Studio on map tile 3068bp30: face down, the first layer
+printed the yellow islands white (layers 2-3 and the face-up top layer
+were correct). The slicer's first-layer colouring can't be trusted for
+paint. Face up took 2 h 11 min vs 1 h 12 min, all supports inside the
+underside.
+
 General method for any hat or helmet:
 
 1. Look at the socket. If its closed end (ceiling) is at the crown and an

@@ -6,7 +6,8 @@ A `.3mf` output (or `--format 3mf`) writes ONE solid with the pattern
 colours painted on its faces (`--color-mode paint`, the default). This is
 right for LDraw printed patterns, which are coloured patches of one surface.
 
-- The most-used colour is filament 1 (unpainted). Each other colour is
+- The colour with the most surface area is filament 1 (unpainted; it also
+  fills the inside of the part). Each other colour is
   painted as filament 2, 3, … The command prints the order (and `--json`
   returns it as `filaments`); load filaments in that order / map AMS slots.
 - `--color CODE` sets the main colour (LDraw colour 16). Find codes with
@@ -27,6 +28,9 @@ Cost: on a single-nozzle printer every colour change is a filament swap and
 purge. Bicorne 2528ap30 at 5:1: 92 changes, 4 h 18 min, 57 g, versus
 1 h 45 min, 38 g in plain black. Multi-toolhead printers (Prusa XL,
 toolchangers) avoid most of that waste.
+
+Put painted faces UP, not on the bed: Bambu Studio mis-coloured part of a
+face-down pattern's first layer (see `guide orientation`).
 
 `--color-mode parts` writes one part per colour instead; only useful when
 each colour is a closed solid of its own (not for printed patterns).

@@ -43,7 +43,7 @@ convert / inspect (shared fields)
 
 convert adds
 - `output` {path, format: stl|3mf, color_mode: paint|parts|null, bytes}
-- `filaments` [{slot, code, name, hex, triangles, base}] (painted 3MF only)
+- `filaments` [{slot, code, name, hex, triangles, area_mm2, base}] (painted 3MF only; ordered by area, slot 1 = base)
 
 inspect adds `files`, `uncertified_files`, `diagnostics` (counts; issues and
 components are at top level), and with

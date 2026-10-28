@@ -892,8 +892,9 @@ fn run(cli: Cli) -> Result<()> {
                 paint_filaments(&model)
                     .iter()
                     .enumerate()
-                    .map(|(i, (c, n))| {
-                        json!({"slot": i + 1, "code": c, "name": lib.colors.name(*c), "hex": hex(lib.colors.rgba(*c)), "triangles": n, "base": i == 0})
+                    .map(|(i, f)| {
+                        json!({"slot": i + 1, "code": f.code, "name": lib.colors.name(f.code), "hex": hex(lib.colors.rgba(f.code)),
+                               "triangles": f.triangles, "area_mm2": (f.area_mm2 * 10.0).round() / 10.0, "base": i == 0})
                     })
                     .collect()
             } else {
@@ -940,12 +941,12 @@ fn run(cli: Cli) -> Result<()> {
                 println!("Load these filaments in the slicer, in this order:");
                 for f in &filaments {
                     println!(
-                        "  filament {}: {} (LDraw {}, {}) — {} triangles{}",
+                        "  filament {}: {} (LDraw {}, {}) — {:.0} mm² of surface{}",
                         f["slot"],
                         f["name"].as_str().unwrap(),
                         f["code"],
                         f["hex"].as_str().unwrap(),
-                        f["triangles"],
+                        f["area_mm2"].as_f64().unwrap(),
                         if f["base"].as_bool().unwrap() {
                             ", unpainted base"
                         } else {

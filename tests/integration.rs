@@ -543,7 +543,7 @@ fn painted_three_mf_is_one_solid_with_painted_faces() {
     assert!(!text.contains("<component "));
     assert_eq!(text.matches("<triangle ").count(), out.mesh.tris.len());
     // Every non-base triangle is painted with filament 2 for Bambu and Prusa.
-    let base = filaments[0].0;
+    let base = filaments[0].code;
     let painted = out.mesh.tris.iter().filter(|t| t.color != base).count();
     assert_eq!(text.matches("paint_color=\"8\"").count(), painted);
     assert_eq!(

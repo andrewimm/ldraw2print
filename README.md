@@ -573,8 +573,11 @@ solid pieces: the coloured regions are patches of the part's one closed
 surface. `convert … -o part.3mf` therefore writes **one solid with painted
 faces** (`--color-mode paint`, the default):
 
-- The most-used colour is filament 1 and is left unpainted. Every other
+- The colour covering the most surface area is filament 1 and is left
+  unpainted; the slicer also uses it for the inside of the part. Every other
   colour is painted with filament 2, 3, … on the triangles LDraw gives it.
+  (Area, not triangle count: a printed pattern's fine linework can use more
+  triangles than the whole body.)
 - Paint is stored as `paint_color` (Bambu Studio / OrcaSlicer) and
   `slic3rpe:mmu_segmentation` (PrusaSlicer) on each triangle, plus core-3MF
   base materials, so plain 3MF viewers also show the colours.
@@ -582,8 +585,8 @@ faces** (`--color-mode paint`, the default):
 
   ```text
   Load these filaments in the slicer, in this order:
-    filament 1: Yellow (LDraw 14, #FAC80A) — 3490 triangles, unpainted base
-    filament 2: Black (LDraw 0, #1B2A34) — 202 triangles
+    filament 1: Yellow (LDraw 14, #FAC80A) — 14315 mm² of surface, unpainted base
+    filament 2: Black (LDraw 0, #1B2A34) — 67 mm² of surface
   ```
 
   The same list is in the 3MF's Description metadata. Load filaments in that

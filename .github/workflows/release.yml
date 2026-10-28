@@ -1,0 +1,178 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  # The same thing by hand, for a tag that already exists (a release that
+  # failed halfway). It builds the tag, not whatever main has now.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to build and release, such as v0.1.1"
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  # Matches rust-toolchain.toml; set explicitly so the release is built with a
+  # compiler somebody chose.
+  RUSTUP_TOOLCHAIN: 1.98.1
+
+jobs:
+  # Built inside the oldest distribution the binary is meant to run on, never
+  # on the runner: glibc is not backward compatible, so a binary built against
+  # a newer one won't start on an older system.
+  linux:
+    name: build Linux binary (${{ matrix.arch }})
+    strategy:
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-latest
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    container: debian:bookworm
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
+      - run: |
+          apt-get update
+          apt-get install -y build-essential curl ca-certificates
+      - name: Install Rust
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+            | sh -s -- -y --default-toolchain "$RUSTUP_TOOLCHAIN" --profile minimal
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      # Before anything is built: archives carry Cargo.toml's version, not the tag's.
+      - run: packaging/release-check.sh "${{ inputs.tag || github.ref_name }}"
+      - run: cargo build --release --locked
+      - run: |
+          version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)
+          dir=ldraw2print-$version-linux-${{ matrix.arch }}
+          mkdir "$dir"
+          cp target/release/ldraw2print README.md LICENSE "$dir/"
+          tar -czf "$dir.tar.gz" "$dir"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-${{ matrix.arch }}
+          path: ldraw2print-*-linux-*.tar.gz
+
+  # One universal binary for Apple Silicon and Intel, built on the oldest
+  # macOS the toolchain supports targeting rather than the runner's own.
+  macos:
+    name: build macOS binary
+    runs-on: macos-latest
+    env:
+      MACOSX_DEPLOYMENT_TARGET: "11.0"
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
+      - run: packaging/release-check.sh "${{ inputs.tag || github.ref_name }}"
+      - run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+      - run: |
+          cargo build --release --locked --target aarch64-apple-darwin
+          cargo build --release --locked --target x86_64-apple-darwin
+      # lipo leaves the Intel slice unsigned, and an ad-hoc signature is the
+      # least Apple Silicon will run; this signs both.
+      - run: |
+          version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)
+          dir=ldraw2print-$version-macos
+          mkdir "$dir"
+          lipo -create -output "$dir/ldraw2print" \
+            target/aarch64-apple-darwin/release/ldraw2print \
+            target/x86_64-apple-darwin/release/ldraw2print
+          codesign --force --sign - "$dir/ldraw2print"
+          cp README.md LICENSE "$dir/"
+          tar -czf "$dir.tar.gz" "$dir"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: ldraw2print-*-macos.tar.gz
+
+  # Running the binary in a clean container is the only real test that it
+  # starts on the oldest supported system: the one that built it has every
+  # build tool installed and satisfies everything by accident.
+  verify-linux:
+    name: run Linux binary (${{ matrix.arch }})
+    needs: linux
+    strategy:
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-latest
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    container: debian:bookworm
+    steps:
+      # For the small test library the conversion below reads. The container
+      # has no git, so this downloads the tag as an archive (whole, but small).
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux-${{ matrix.arch }}
+      - run: |
+          tar -xzf ldraw2print-*-linux-*.tar.gz
+          bin=$(echo ldraw2print-*-linux-*/ldraw2print)
+          "$bin" --version
+          # End to end, headless: a fitted STL and a painted 3MF.
+          "$bin" --ldraw-dir tests/fixtures/ldraw convert testhat --strict \
+            --connector head-stud --fit normal -o /tmp/hat.stl
+          "$bin" --ldraw-dir tests/fixtures/ldraw convert testhat -o /tmp/hat.3mf
+
+  # Both slices of the universal binary, each on its own hardware.
+  verify-macos:
+    name: run macOS binary (${{ matrix.os }})
+    needs: macos
+    strategy:
+      matrix:
+        os: [macos-latest, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
+          sparse-checkout: tests/fixtures/ldraw
+      - uses: actions/download-artifact@v4
+        with:
+          name: macos
+      - run: |
+          tar -xzf ldraw2print-*-macos.tar.gz
+          bin=$(echo ldraw2print-*-macos/ldraw2print)
+          codesign --verify --all-architectures "$bin"
+          "$bin" --version
+          "$bin" --ldraw-dir tests/fixtures/ldraw convert testhat --strict \
+            --connector head-stud --fit normal -o "$RUNNER_TEMP/hat.stl"
+          "$bin" --ldraw-dir tests/fixtures/ldraw convert testhat -o "$RUNNER_TEMP/hat.3mf"
+
+  publish:
+    name: attach to the release
+    needs: [verify-linux, verify-macos]
+    runs-on: ubuntu-latest
+    # Job permissions replace the workflow's, so contents is repeated.
+    permissions:
+      contents: write
+      # Provenance is signed with a short-lived certificate fetched with this
+      # token, so there's no signing key to keep or leak. Check a download with
+      # `gh attestation verify <file> --repo andrewimm/ldraw2print`.
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+      - uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: dist/**/*
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          files: dist/**/*
+          generate_release_notes: true

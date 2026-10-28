@@ -1,0 +1,130 @@
+# ldraw2print configuration.
+#
+# Copy to ~/.config/ldraw2print/config.toml (or ./ldraw2print.toml) and edit,
+# or run `ldraw2print config init`.
+#
+# Dimensions come in three distinct kinds — keep them separate:
+#   * nominal_*_ldu        LEGO/LDraw reference geometry at 1:1, in LDraw units
+#                          (1 LDU = 0.4 mm). Multiplied by the scale factor.
+#   * measured_diameter_mm What YOUR physical 5:1 minifigure actually measures
+#                          (calipers). Overrides nominal × scale when set.
+#   * fit / compensation   Clearance you want between the parts, plus what your
+#                          printer needs to hit a dimension. Determine with
+#                          `ldraw2print calibrate`.
+
+# Root of the LDraw library (the folder that contains parts/, p/ and LDConfig.ldr).
+# Can also be set with --ldraw-dir or the LDRAWDIR environment variable.
+# ldraw_dir = "/Users/you/ldraw"
+
+default_scale = 5.0
+# Colour code used for "main colour" (16) at the top level. 71 = Light Bluish Grey.
+default_color = 71
+# standard | high | low. "high" substitutes 48-segment primitives where they
+# exist; this can leave seams where hi-res and normal-res geometry meet.
+primitive_resolution = "standard"
+
+[mesh]
+# Vertices closer than this (in LDU) are merged. 0.005 LDU = 0.01 mm at 5:1.
+weld_tolerance_ldu = 0.005
+# Split triangles at T-junctions (never moves vertices).
+fix_t_junctions = false
+# Infer facing for non-BFC-certified geometry from topology.
+orient = false
+# Re-tessellate round primitives (16-gons) to N segments per circle, e.g. 96.
+# Must be a multiple of 16; 48/96/144 also refine p/48 hi-res primitives.
+# smooth_segments = 96
+# Close separate open pieces (e.g. hat ribs that LDraw draws without their
+# hidden faces) so slicers don't drop them. Only adds faces.
+close_open_shells = false
+
+[printer]
+# Added to the diameter of printed holes / subtracted from printed pins, mm.
+# Leave at 0 until a calibration print tells you otherwise.
+hole_compensation_mm = 0.0
+pin_compensation_mm = 0.0
+
+# Diametral clearance (mm) between the mating surfaces for each fit preset.
+# These are starting points for FDM printing, not guarantees: calibrate.
+[fit_presets]
+loose = 0.40
+normal = 0.20
+tight = 0.05
+
+# --- Connector profiles -----------------------------------------------------
+# gender = "socket": the accessory has a hole that slides over a male feature.
+# gender = "pin":    the accessory has a bar/pin that is gripped by a hole.
+# axis   = "vertical" (LDraw Y) or "any".
+
+[connectors.head-stud]
+description = "Hat / hair / helmet socket over the head's top stud"
+gender = "socket"
+axis = "vertical"
+# LDraw geometry: head 3626c top stud (stud2.dat) is r = 6 LDU, 4 LDU tall;
+# headwear sockets (stud4.dat inner wall) match it. 12 LDU = 4.8 mm at 1:1.
+nominal_diameter_ldu = 12.0
+nominal_depth_ldu = 4.0
+# Measure the head stud of YOUR 5:1 figure and enter it here (mm):
+# measured_diameter_mm = 24.0
+# measured_at_scale = 5.0
+default_fit = "tight"
+calibration = { date = "2026-10-25", printer = "Bambu Lab H2S, 0.4 mm nozzle", material = "Generic PETG", scale = 5.0, result = "coupon 3 (tight, 0.05 mm) fit best" }
+# After printing `ldraw2print calibrate` coupons, record what fit best:
+# default_fit = "tight"
+# calibration = { date = "2026-10-25", printer = "Bambu Lab H2S", material = "PETG", scale = 5.0, result = "coupon 3 (tight) fit best" }
+match_tolerance = 0.1
+# Transparent head drawn below the stud in the preview (3626c body: r = 13 LDU).
+reference_body = { diameter_ldu = 26.0, length_ldu = 24.0 }
+
+[connectors.head-body]
+description = "Headwear recess that slides over the head itself (e.g. bicorne 2528), a clearance surface, not a grip"
+gender = "socket"
+axis = "vertical"
+# LDraw geometry: head 3626c body is r = 13 LDU; bicorne 2528 has an r = 13
+# recess 5 LDU deep around it, modelled with zero clearance.
+nominal_diameter_ldu = 26.0
+nominal_depth_ldu = 5.0
+# measured_diameter_mm = 52.0
+default_fit = "loose"
+match_tolerance = 0.05
+
+[connectors.neck]
+description = "Opening around the torso neck post, clamped between torso and head (backpacks, airtanks, capes, neck brackets)"
+gender = "socket"
+axis = "vertical"
+# LDraw geometry: torso 973 neck post is r = 6 LDU, 12 LDU tall; backpack 2524
+# and airtanks 3838 wrap it with an r = 6 hole.
+nominal_diameter_ldu = 12.0
+nominal_depth_ldu = 12.0
+# measured_diameter_mm = 24.0
+default_fit = "normal"
+match_tolerance = 0.1
+# Many neck items are C-clips covering only part of the circle.
+min_coverage = 0.5
+
+[connectors.scarf]
+description = "Scarf / face-scarf opening around the head's bottom neck collar"
+gender = "socket"
+axis = "vertical"
+# LDraw geometry: head 3626c bottom collar is r = 8 LDU, 3 LDU tall; scarves
+# 25376 and 24504 wrap it with an r = 8 hole.
+nominal_diameter_ldu = 16.0
+nominal_depth_ldu = 3.0
+# measured_diameter_mm = 32.0
+default_fit = "normal"
+match_tolerance = 0.1
+min_coverage = 0.5
+
+[connectors.hand-grip]
+description = "Handheld accessory bar gripped by the minifigure hand"
+gender = "pin"
+axis = "any"
+# LDraw geometry: hand 3820 grip and bar accessories (e.g. 4497 spear shaft)
+# are r = 4 LDU. 8 LDU = 3.2 mm at 1:1 (LEGO bar ≈ 3.18 mm).
+nominal_diameter_ldu = 8.0
+nominal_depth_ldu = 8.0
+# Measure the grip opening of YOUR 5:1 hand here (mm):
+# measured_diameter_mm = 16.0
+default_fit = "tight"
+match_tolerance = 0.1
+# Per-connector presets override [fit_presets]:
+# fit = { loose = 0.30, normal = 0.15, tight = 0.0 }

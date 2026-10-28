@@ -1,0 +1,14 @@
+0 Test Two Sockets
+0 Name: testtwosockets.dat
+0 Author: ldraw2print test fixtures
+0 !LDRAW_ORG Part
+0 !LICENSE Licensed under CC BY 4.0
+
+0 BFC CERTIFY CCW
+
+0 BFC INVERTNEXT
+1 16 -20 0 0 6 0 0 0 -4 0 0 0 6 4-4cyli.dat
+1 16 -20 -4 0 6 0 0 0 -1 0 0 0 6 4-4disc.dat
+0 BFC INVERTNEXT
+1 16 20 0 0 6 0 0 0 -4 0 0 0 6 4-4cyli.dat
+1 16 20 -4 0 6 0 0 0 -1 0 0 0 6 4-4disc.dat

@@ -1,0 +1,21 @@
+[package]
+name = "ldraw2print"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.88"
+description = "Convert LDraw parts into 3D-printable models, focused on scaled-up minifigure accessories"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+toml_edit = "0.22"
+tiny_http = "0.12"
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.release]
+lto = "thin"

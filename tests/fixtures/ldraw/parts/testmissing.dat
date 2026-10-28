@@ -1,0 +1,9 @@
+0 Missing reference (test)
+0 Name: testmissing.dat
+0 Author: ldraw2print test fixtures
+0 !LDRAW_ORG Part
+0 !LICENSE Licensed under CC BY 4.0
+
+0 BFC CERTIFY CCW
+1 16 0 0 0 1 0 0 0 1 0 0 0 1 testbox.dat
+1 16 0 0 0 1 0 0 0 1 0 0 0 1 doesnotexist.dat

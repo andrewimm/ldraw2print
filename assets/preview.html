@@ -1,0 +1,401 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ldraw2print preview</title>
+<style>
+  :root { --bg:#16181d; --panel:#1f2229; --line:#2e323b; --text:#d8dbe2; --muted:#8a90a0; --accent:#4fb3ff;
+          --err:#ff6b6b; --warn:#f5b84a; --info:#7fb2ff; --ok:#5ad08a; }
+  * { box-sizing: border-box; }
+  html, body { margin:0; height:100%; background:var(--bg); color:var(--text);
+               font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  #app { display:flex; height:100%; }
+  #view { flex:1; position:relative; min-width:0; }
+  #view canvas { display:block; }
+  #side { width:340px; overflow-y:auto; background:var(--panel); border-left:1px solid var(--line); padding:12px 14px 40px; }
+  h1 { font-size:15px; margin:0 0 2px; } h2 { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:16px 0 6px; }
+  .sub { color:var(--muted); margin-bottom:6px; word-break:break-word; }
+  label { display:flex; align-items:center; gap:6px; margin:3px 0; }
+  .row { display:grid; grid-template-columns: 110px 1fr; gap:4px 8px; align-items:center; margin:3px 0; }
+  input[type=number], input[type=text], select { width:100%; background:#14161a; color:var(--text); border:1px solid var(--line); border-radius:4px; padding:4px 6px; font:inherit; }
+  button { background:var(--accent); color:#04121f; border:0; border-radius:4px; padding:6px 10px; font:inherit; font-weight:600; cursor:pointer; }
+  button.secondary { background:#2c313b; color:var(--text); }
+  .btns { display:flex; gap:6px; margin-top:8px; flex-wrap:wrap; }
+  .toggles { display:grid; grid-template-columns:1fr 1fr; gap:0 8px; }
+  .dims { font-variant-numeric: tabular-nums; font-size:14px; }
+  .issue { padding:3px 0 3px 8px; border-left:3px solid var(--line); margin:3px 0; }
+  .issue.error { border-color:var(--err); } .issue.warning { border-color:var(--warn); } .issue.info { border-color:var(--info); }
+  .badge { display:inline-block; padding:1px 6px; border-radius:8px; font-size:11px; font-weight:600; }
+  .badge.ok { background:#1d3b2a; color:var(--ok); } .badge.bad { background:#3d1f22; color:var(--err); }
+  table { border-collapse:collapse; width:100%; font-variant-numeric:tabular-nums; }
+  td { padding:1px 4px 1px 0; vertical-align:top; } td:first-child { color:var(--muted); white-space:nowrap; }
+  #status { position:absolute; left:12px; top:10px; background:rgba(0,0,0,.55); padding:4px 8px; border-radius:4px; pointer-events:none; }
+  #pick { position:absolute; left:12px; bottom:10px; background:rgba(0,0,0,.55); padding:4px 8px; border-radius:4px; max-width:60%; }
+  #error { color:var(--err); white-space:pre-wrap; font-family:ui-monospace, Menlo, monospace; font-size:11.5px; }
+  .warnlist div { color:var(--warn); margin:2px 0; }
+  .mono { font-family: ui-monospace, Menlo, monospace; font-size:11.5px; }
+</style>
+<script type="importmap">
+{ "imports": { "three": "/vendor/three.module.min.js" } }
+</script>
+</head>
+<body>
+<div id="app">
+  <div id="view"><div id="status">Loading…</div><div id="pick" hidden></div></div>
+  <div id="side">
+    <h1 id="title">ldraw2print</h1>
+    <div class="sub" id="subtitle"></div>
+    <div class="dims" id="dims"></div>
+    <div id="watertight"></div>
+
+    <h2>Build</h2>
+    <div class="row"><span>Scale</span><input id="scale" type="number" step="0.5" min="0.1"></div>
+    <div class="row"><span>Colour code</span><input id="color" type="number" min="0"></div>
+    <div class="row"><span>Primitives</span><select id="res"><option value="standard">as authored</option><option value="high">high (48)</option><option value="low">low (8)</option></select></div>
+    <div class="row"><span>Smooth curves</span><select id="smooth"><option value="0">off (as authored)</option><option value="48">48 segments</option><option value="96">96 segments</option><option value="144">144 segments</option></select></div>
+    <div class="row"><span>Placement</span><select id="placement"><option value="bed">on bed (Z=0)</option><option value="ldraw">LDraw origin</option></select></div>
+    <label><input id="fixtj" type="checkbox"> Fix T-junctions</label>
+    <label><input id="orient" type="checkbox"> Orient uncertified faces</label>
+    <label><input id="flip" type="checkbox"> Print upside down (flip)</label>
+    <label><input id="closeshells" type="checkbox"> Close open shells (ribs, bosses)</label>
+
+    <h2>Connector</h2>
+    <div class="row"><span>Profile</span><select id="connector"><option value="">none</option></select></div>
+    <div class="row"><span>Surface</span><select id="candidate"><option value="auto">auto (unique match only)</option></select></div>
+    <div class="row"><span>Fit</span><select id="fit"><option value="none">none (keep modelled)</option><option>loose</option><option>normal</option><option>tight</option></select></div>
+    <div class="row"><span>Clearance mm</span><input id="clearance" type="number" step="0.05" placeholder="preset"></div>
+    <div id="conninfo"></div>
+
+    <div class="btns">
+      <button id="regen">Regenerate</button>
+      <button id="export" class="secondary">Export STL</button>
+      <button id="export3mf" class="secondary" title="One solid; LDraw colours painted onto faces (Bambu/Orca/Prusa)">Export 3MF (painted)</button>
+    </div>
+    <div id="error"></div>
+
+    <h2>Display</h2>
+    <div class="toggles">
+      <label><input id="t_wire" type="checkbox"> Wireframe</label>
+      <label><input id="t_edges" type="checkbox" checked> LDraw edges</label>
+      <label><input id="t_problems" type="checkbox" checked> Problem edges</label>
+      <label><input id="t_bbox" type="checkbox" checked> Bounding box</label>
+      <label><input id="t_grid" type="checkbox" checked> Grid (10 mm)</label>
+      <label><input id="t_axes" type="checkbox"> Axes</label>
+      <label><input id="t_region" type="checkbox" checked> Attachment region</label>
+      <label><input id="t_ref" type="checkbox" checked> Reference connector</label>
+      <label><input id="t_refbody" type="checkbox"> Reference body</label>
+      <label><input id="t_colors" type="checkbox" checked> LDraw colours</label>
+    </div>
+    <div class="btns">
+      <button class="secondary" data-view="iso">Iso</button><button class="secondary" data-view="front">Front</button>
+      <button class="secondary" data-view="side">Side</button><button class="secondary" data-view="top">Top</button>
+      <button class="secondary" data-view="bottom">Bottom</button>
+    </div>
+    <div class="row"><span>Component</span><select id="component"><option value="all">all</option></select></div>
+
+    <h2>Diagnostics</h2>
+    <div id="issues"></div>
+    <div class="warnlist" id="warnings"></div>
+    <h2>Details</h2>
+    <div id="details"></div>
+  </div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from '/vendor/OrbitControls.js';
+
+const $ = id => document.getElementById(id);
+const view = $('view');
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(window.devicePixelRatio);
+view.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x16181d);
+const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 10000);
+camera.up.set(0, 0, 1);   // print space is Z-up
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+scene.add(new THREE.HemisphereLight(0xffffff, 0x404050, 1.6));
+const key = new THREE.DirectionalLight(0xffffff, 1.6); key.position.set(1, -1.5, 2); scene.add(key);
+const fill = new THREE.DirectionalLight(0xffffff, 0.6); fill.position.set(-1.5, 1, 0.5); scene.add(fill);
+
+let groups = {}; // name -> Object3D
+let data = null, info = null, firstLoad = true;
+
+function resize() {
+  const w = view.clientWidth, h = view.clientHeight;
+  renderer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', resize); resize();
+(function loop() { requestAnimationFrame(loop); controls.update(); renderer.render(scene, camera); })();
+
+function params() {
+  const p = new URLSearchParams();
+  p.set('scale', $('scale').value); p.set('color', $('color').value);
+  p.set('res', $('res').value); p.set('placement', $('placement').value);
+  p.set('fixtj', $('fixtj').checked ? 1 : 0); p.set('smooth', $('smooth').value); p.set('flip', $('flip').checked ? 1 : 0); p.set('closeshells', $('closeshells').checked ? 1 : 0); p.set('orient', $('orient').checked ? 1 : 0);
+  p.set('connector', $('connector').value); p.set('candidate', $('candidate').value);
+  p.set('fit', $('fit').value); p.set('clearance', $('clearance').value);
+  return p;
+}
+
+function clearScene() {
+  for (const g of Object.values(groups)) { scene.remove(g); g.traverse(o => { o.geometry?.dispose(); o.material?.dispose?.(); }); }
+  groups = {};
+}
+
+function segments(flat, color, opacity = 1) {
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(flat, 3));
+  return new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color, transparent: opacity < 1, opacity }));
+}
+
+function buildMesh(geo, triFilter, useColors) {
+  const P = geo.positions, I = geo.indices;
+  const tris = [];
+  for (let t = 0; t < geo.tri_color.length; t++) if (triFilter(t)) tris.push(t);
+  const opaque = [], trans = [];
+  for (const t of tris) (geo.palette[geo.tri_color[t]].rgba[3] < 255 && useColors ? trans : opaque).push(t);
+  const make = (list, transparent) => {
+    const pos = new Float32Array(list.length * 9), col = new Float32Array(list.length * 9);
+    const triIndex = new Uint32Array(list.length);
+    list.forEach((t, k) => {
+      triIndex[k] = t;
+      const c = geo.palette[geo.tri_color[t]].rgba;
+      const rgb = useColors ? [c[0] / 255, c[1] / 255, c[2] / 255] : [0.72, 0.74, 0.78];
+      for (let j = 0; j < 3; j++) {
+        const v = I[t * 3 + j];
+        pos.set([P[v * 3], P[v * 3 + 1], P[v * 3 + 2]], k * 9 + j * 3);
+        col.set(rgb, k * 9 + j * 3);
+      }
+    });
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    g.computeVertexNormals();
+    const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55, metalness: 0.0,
+      side: THREE.DoubleSide, transparent, opacity: transparent ? 0.55 : 1, depthWrite: !transparent,
+      wireframe: $('t_wire').checked, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
+    // Back faces drawn darker so inverted / open geometry is visible.
+    m.onBeforeCompile = s => {
+      s.fragmentShader = s.fragmentShader.replace('#include <dithering_fragment>',
+        '#include <dithering_fragment>\n if (!gl_FrontFacing) gl_FragColor.rgb *= vec3(0.55, 0.35, 0.35);');
+    };
+    const mesh = new THREE.Mesh(g, m);
+    mesh.userData.triIndex = triIndex;
+    return mesh;
+  };
+  const grp = new THREE.Group();
+  if (opaque.length) grp.add(make(opaque, false));
+  if (trans.length) grp.add(make(trans, true));
+  return grp;
+}
+
+function refShape(s, color, opacity) {
+  const dir = new THREE.Vector3(...s.dir).normalize();
+  let geom;
+  if (s.inner_radius > 0) {
+    const pts = [new THREE.Vector2(s.inner_radius, 0), new THREE.Vector2(s.radius, 0),
+                 new THREE.Vector2(s.radius, s.length), new THREE.Vector2(s.inner_radius, s.length),
+                 new THREE.Vector2(s.inner_radius, 0)];
+    geom = new THREE.LatheGeometry(pts, 96);
+  } else {
+    geom = new THREE.CylinderGeometry(s.radius, s.radius, s.length, 96);
+    geom.translate(0, s.length / 2, 0);
+  }
+  const m = new THREE.Mesh(geom, new THREE.MeshStandardMaterial({ color, transparent: true, opacity, depthWrite: false, side: THREE.DoubleSide }));
+  m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+  m.position.set(...s.base);
+  const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geom, 30), new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.8 }));
+  m.add(edges);
+  return m;
+}
+
+function render(d) {
+  clearScene();
+  const geo = d.geometry;
+  const compSel = $('component').value;
+  const filter = compSel === 'all' ? () => true : t => geo.tri_component[t] === +compSel;
+  groups.model = buildMesh(geo, filter, $('t_colors').checked);
+  scene.add(groups.model);
+  if (geo.edges.length) { groups.edges = segments(geo.edges, 0x111111, 0.85); scene.add(groups.edges); }
+  const prob = new THREE.Group();
+  if (geo.boundary_edges.length) prob.add(segments(geo.boundary_edges, 0xff3b3b));
+  if (geo.nonmanifold_edges.length) prob.add(segments(geo.nonmanifold_edges, 0xff40ff));
+  groups.problems = prob; scene.add(prob);
+
+  const bb = new THREE.Box3(new THREE.Vector3(...d.bbox.min), new THREE.Vector3(...d.bbox.max));
+  groups.bbox = new THREE.Box3Helper(bb, 0x4fb3ff); scene.add(groups.bbox);
+  const size = bb.getSize(new THREE.Vector3()), center = bb.getCenter(new THREE.Vector3());
+  const extent = Math.max(size.x, size.y, size.z, 1);
+  const gridSize = Math.ceil(extent * 2.5 / 10) * 10;
+  const grid = new THREE.GridHelper(gridSize, gridSize / 10, 0x5a6070, 0x30343d);
+  grid.rotation.x = Math.PI / 2; grid.position.set(center.x, center.y, bb.min.z - 0.01);
+  const plane = new THREE.Mesh(new THREE.PlaneGeometry(gridSize, gridSize),
+    new THREE.MeshBasicMaterial({ color: 0x1c1f25, transparent: true, opacity: 0.6, side: THREE.DoubleSide, depthWrite: false }));
+  plane.position.copy(grid.position).setZ(bb.min.z - 0.02);
+  groups.grid = new THREE.Group(); groups.grid.add(plane, grid); scene.add(groups.grid);
+  groups.axes = new THREE.AxesHelper(extent * 0.6); scene.add(groups.axes);
+
+  const conn = d.connector;
+  if (conn && conn.region_triangles.length) {
+    const set = new Set(conn.region_triangles);
+    const reg = buildMesh(geo, t => set.has(t), false);
+    reg.traverse(o => { if (o.isMesh) { o.material.color = new THREE.Color(0x00e5ff); o.material.vertexColors = false;
+      o.material.transparent = true; o.material.opacity = 0.75; o.material.polygonOffsetFactor = -1; o.material.polygonOffsetUnits = -4; } });
+    groups.region = reg; scene.add(reg);
+  }
+  if (conn && conn.reference.length) {
+    groups.ref = new THREE.Group(); groups.refbody = new THREE.Group();
+    for (const s of conn.reference) {
+      if (s.label === 'reference body') groups.refbody.add(refShape(s, 0xffd34d, 0.12));
+      else groups.ref.add(refShape(s, 0x7cff6b, 0.3));
+    }
+    scene.add(groups.ref, groups.refbody);
+  }
+  applyToggles();
+  lastBox = { center, extent };
+  if (firstLoad) {
+    firstLoad = false;
+    camera.near = extent / 200; camera.far = extent * 100; camera.updateProjectionMatrix();
+    setView(new URLSearchParams(location.search).get('view') || 'iso');
+  }
+}
+
+let lastBox = null;
+const VIEWS = { iso: [1.4, -1.9, 1.2], front: [0, -2.6, 0.25], side: [2.6, 0, 0.25], top: [0, -0.01, 2.8], bottom: [0.6, -1.2, -2.4] };
+function setView(name) {
+  if (!lastBox) return;
+  const v = VIEWS[name] || VIEWS.iso, { center, extent } = lastBox;
+  controls.target.copy(center);
+  camera.position.copy(center).add(new THREE.Vector3(...v).multiplyScalar(extent));
+  controls.update();
+}
+document.querySelectorAll('[data-view]').forEach(b => b.onclick = () => setView(b.dataset.view));
+
+function applyToggles() {
+  const vis = (k, on) => { if (groups[k]) groups[k].visible = on; };
+  vis('edges', $('t_edges').checked); vis('problems', $('t_problems').checked);
+  vis('bbox', $('t_bbox').checked); vis('grid', $('t_grid').checked); vis('axes', $('t_axes').checked);
+  vis('region', $('t_region').checked); vis('ref', $('t_ref').checked); vis('refbody', $('t_refbody').checked);
+  groups.model?.traverse(o => { if (o.isMesh) o.material.wireframe = $('t_wire').checked; });
+}
+
+const fmt = (v, n = 2) => (+v).toFixed(n);
+const esc = s => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+
+function panels(d) {
+  $('title').textContent = d.name;
+  $('subtitle').textContent = d.description;
+  const s = d.bbox.size;
+  $('dims').innerHTML = `${fmt(s[0])} × ${fmt(s[1])} × ${fmt(s[2])} mm <span class="sub">(X × Y × Z)</span>`;
+  const dg = d.diagnostics;
+  $('watertight').innerHTML = dg.watertight ? '<span class="badge ok">watertight</span>' : '<span class="badge bad">not watertight</span>';
+  $('issues').innerHTML = dg.issues.map(i => `<div class="issue ${i.severity}">${esc(i.message)}</div>`).join('');
+  $('warnings').innerHTML = d.warnings.map(w => `<div>⚠ ${esc(w)}</div>`).join('');
+  const comps = dg.components;
+  const sel = $('component'), prev = sel.value;
+  sel.innerHTML = '<option value="all">all (' + comps.length + ')</option>' + comps.map(c =>
+    `<option value="${c.id}">#${c.id}: ${c.triangles} tris${c.closed ? ', closed' : ''}</option>`).join('');
+  if ([...sel.options].some(o => o.value === prev)) sel.value = prev;
+  const rows = [
+    ['Scale', `${$('scale').value}:1 (${fmt(d.mm_per_ldu, 3)} mm/LDU)`],
+    ['Triangles', `${dg.triangles} (from ${d.source_triangles} source)`],
+    ['Vertices', dg.vertices], ['Components', comps.length],
+    ['Boundary edges', dg.boundary_edges], ['Non-manifold', dg.nonmanifold_edges],
+    ['Inconsistent', dg.inconsistent_edges], ['T-junctions', dg.t_junctions],
+    ['Intersections', dg.intersecting_pairs ?? 'skipped'], ['Volume', `${fmt(dg.signed_volume / 1000, 3)} cm³`],
+    ['Files', d.files.length], ['Uncertified', d.uncertified_files.join(', ') || 'none'],
+    ...d.repairs.map(r => ['Repair', esc(r.note)]),
+  ];
+  $('details').innerHTML = '<table>' + rows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td></tr>`).join('') + '</table>';
+
+  const c = d.connector, ci = $('conninfo'), cs = $('candidate');
+  const prevCand = cs.value;
+  cs.innerHTML = '<option value="auto">auto (unique match only)</option>';
+  if (!c) { ci.innerHTML = ''; return; }
+  for (const k of c.candidates) {
+    const facing = { inward: 'hole', outward: 'pin', unknown: '?' }[k.facing];
+    cs.insertAdjacentHTML('beforeend', `<option value="${k.id}">#${k.id} ${facing} Ø${fmt(k.radius_ldu * 2)} LDU, ${fmt(k.h_max - k.h_min)} deep</option>`);
+  }
+  if ([...cs.options].some(o => o.value === prevCand)) cs.value = prevCand;
+  let h = '';
+  if (c.selection_error) h += `<div class="issue warning mono">${esc(c.selection_error)}</div>`;
+  if (c.selection) h += `<div class="sub">Using surface #${c.selection.candidate} (${c.selection.how})</div>`;
+  if (c.plan) {
+    const p = c.plan, applied = !!c.fit;
+    const r = [
+      ['Mating Ø', `${fmt(p.mating_diameter_mm, 3)} mm (${p.mating_source})`],
+      ['Modelled Ø', `${fmt(p.modelled_effective_diameter_mm, 3)} mm effective, ${p.segments}-gon`],
+      ['Clearance', `${fmt(p.clearance_mm, 3)} mm${applied ? '' : ' (not applied)'}`],
+      ['Compensation', `${fmt(p.compensation_mm, 3)} mm`],
+      ['Target Ø', `${fmt(p.target_effective_diameter_mm, 3)} mm${applied ? '' : ' (not applied)'}`],
+    ];
+    if (applied) r.push(['Moved', `${c.fit.moved_vertices} vertices, Δr ${fmt(c.fit.radial_change_mm, 3)} mm`]);
+    if (c.selected_mm) r.push(['Depth', `${fmt(c.selected_mm.depth_mm)} mm`]);
+    h += '<table>' + r.map(x => `<tr><td>${x[0]}</td><td>${x[1]}</td></tr>`).join('') + '</table>';
+  }
+  ci.innerHTML = h;
+}
+
+async function load() {
+  $('status').textContent = 'Building…'; $('status').hidden = false; $('error').textContent = '';
+  try {
+    const r = await fetch('/api/model?' + params());
+    const d = await r.json();
+    if (!d.ok) { $('error').textContent = d.error; $('status').textContent = 'Error'; return; }
+    data = d; panels(d); render(d);
+    $('status').hidden = true;
+  } catch (e) { $('error').textContent = String(e); $('status').textContent = 'Error'; }
+}
+
+async function init() {
+  const qs = new URLSearchParams(location.search);
+  for (const k of ['wire', 'edges', 'problems', 'bbox', 'grid', 'axes', 'region', 'ref', 'refbody', 'colors'])
+    if (qs.has(k)) $('t_' + k).checked = qs.get(k) === '1';
+  info = await (await fetch('/api/info')).json();
+  $('flip').checked = !!info.flip;
+  if (info.smooth) { if (![...$('smooth').options].some(o => o.value == info.smooth)) $('smooth').insertAdjacentHTML('beforeend', `<option value="${info.smooth}">${info.smooth} segments</option>`); $('smooth').value = info.smooth; }
+  $('scale').value = info.scale; $('color').value = info.color; $('res').value = info.resolution;
+  for (const p of info.profiles) $('connector').insertAdjacentHTML('beforeend', `<option value="${p.name}" title="${esc(p.description)}">${p.name} (${p.gender})</option>`);
+  if (info.connector) $('connector').value = info.connector;
+  if (info.fit) $('fit').value = info.fit === 'clearance' ? (info.profiles.find(p => p.name === info.connector)?.default_fit ?? 'normal') : info.fit;
+  if (info.candidate != null) { $('candidate').insertAdjacentHTML('beforeend', `<option value="${info.candidate}">#${info.candidate}</option>`); $('candidate').value = info.candidate; }
+  await load();
+}
+
+$('regen').onclick = load;
+$('connector').onchange = () => { $('candidate').value = 'auto'; load(); };
+for (const id of ['candidate', 'fit', 'res', 'placement', 'fixtj', 'orient', 'flip', 'smooth', 'closeshells']) $(id).onchange = load;
+for (const id of ['scale', 'color', 'clearance']) $(id).addEventListener('keydown', e => { if (e.key === 'Enter') load(); });
+$('export').onclick = () => { window.location = '/api/stl?' + params(); };
+$('export3mf').onclick = () => { window.location = '/api/3mf?' + params(); };
+for (const id of ['t_edges', 't_problems', 't_bbox', 't_grid', 't_axes', 't_region', 't_ref', 't_refbody', 't_wire']) $(id).onchange = applyToggles;
+$('t_colors').onchange = () => data && render(data);
+$('component').onchange = () => data && render(data);
+
+// Click to inspect a triangle.
+const ray = new THREE.Raycaster(); const ndc = new THREE.Vector2(); let downAt = null;
+renderer.domElement.addEventListener('pointerdown', e => downAt = [e.clientX, e.clientY]);
+renderer.domElement.addEventListener('pointerup', e => {
+  if (!downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 4 || !data) return;
+  const r = renderer.domElement.getBoundingClientRect();
+  ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+  ray.setFromCamera(ndc, camera);
+  const hit = ray.intersectObjects(groups.model ? groups.model.children : [], false)[0];
+  const pick = $('pick');
+  if (!hit) { pick.hidden = true; return; }
+  const t = hit.object.userData.triIndex[hit.faceIndex];
+  const g = data.geometry, col = g.palette[g.tri_color[t]];
+  const p = hit.point;
+  pick.innerHTML = `tri ${t} · component #${g.tri_component[t]} · ${esc(col.name)} (${col.code}) · ${esc(data.files[g.tri_file[t]] ?? '')}<br>` +
+    `x ${fmt(p.x)} y ${fmt(p.y)} z ${fmt(p.z)} mm`;
+  pick.hidden = false;
+});
+
+init();
+</script>
+</body>
+</html>

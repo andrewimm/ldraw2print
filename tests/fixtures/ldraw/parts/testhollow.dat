@@ -1,0 +1,11 @@
+0 Hollow box (test)
+0 Name: testhollow.dat
+0 Author: ldraw2print test fixtures
+0 !LDRAW_ORG Part
+0 !LICENSE Licensed under CC BY 4.0
+
+0 BFC CERTIFY CCW
+
+1 16 0 0 0 10 0 0 0 10 0 0 0 10 testbox.dat
+0 BFC INVERTNEXT
+1 16 2 2 2 6 0 0 0 6 0 0 0 6 testbox.dat

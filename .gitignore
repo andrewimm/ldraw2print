@@ -1,0 +1,31 @@
+# Rust
+/target/
+**/*.rs.bk
+# Windows debug symbols
+*.pdb
+# Cargo.lock is committed: this is a binary, and CI builds with --locked.
+
+# Generated models: outputs of `convert` and `calibrate` (the tests write theirs
+# to temporary directories), plus the summary `calibrate` writes by default.
+*.stl
+*.3mf
+/calibration.txt
+# Personal prints and slicer projects; not part of the tool.
+/prints/
+
+# Bambu Studio's CLI writes this into the current directory.
+result.json
+
+# Eval transcripts and outputs (large, machine-specific; see evals/RESULTS.md).
+/evals/runs/
+
+# Python
+__pycache__/
+*.pyc
+
+# Editors and OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~

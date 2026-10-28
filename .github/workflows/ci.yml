@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  check:
+    name: fmt, clippy, tests (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        # Linux has a case-sensitive filesystem; LDraw files are referenced in
+        # any case, so the library lookup is exercised differently there.
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      # Sets up rustup; the compiler itself is rust-toolchain.toml's to choose,
+      # which outranks whatever is made default here.
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets --locked
+      # The tests use the small library in tests/fixtures/ldraw, not the real
+      # LDraw library, so nothing has to be downloaded.
+      - run: cargo test --locked
+      # End to end through the binary, headless: a fitted STL and a painted 3MF.
+      - run: |
+          cargo run --locked -- --ldraw-dir tests/fixtures/ldraw \
+            convert testhat --strict --connector head-stud --fit normal -o "$RUNNER_TEMP/hat.stl"
+          cargo run --locked -- --ldraw-dir tests/fixtures/ldraw \
+            convert testhat -o "$RUNNER_TEMP/hat.3mf"
+
+  msrv:
+    name: minimum supported rust version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@1.88.0
+      - uses: Swatinem/rust-cache@v2
+      # RUSTUP_TOOLCHAIN, because rust-toolchain.toml outranks `rustup default`:
+      # without it this job would install 1.88 and then compile with the pinned
+      # toolchain, passing while proving nothing about 1.88.
+      - run: cargo check --locked
+        env:
+          RUSTUP_TOOLCHAIN: 1.88.0

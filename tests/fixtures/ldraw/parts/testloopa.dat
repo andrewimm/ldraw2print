@@ -1,0 +1,7 @@
+0 Loop A (test)
+0 Name: testloopa.dat
+0 Author: ldraw2print test fixtures
+0 !LDRAW_ORG Part
+0 !LICENSE Licensed under CC BY 4.0
+
+1 16 0 0 0 1 0 0 0 1 0 0 0 1 testloopb.dat

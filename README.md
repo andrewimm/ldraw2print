@@ -46,6 +46,7 @@ text lives in [`docs/guide/`](docs/guide/).
 12. [Architecture](#architecture)
 13. [Testing](#testing)
 14. [Limitations](#limitations)
+15. [Licensing](#licensing)
 
 ---
 
@@ -769,3 +770,17 @@ To regenerate the fixtures, run `python3 tests/fixtures/gen_fixtures.py`.
 - Painted 3MF assigns whole LDraw triangles to filaments (no sub-triangle
   brush detail), doesn't set filament colours, and has only been verified
   in Bambu Studio. `--color-mode parts` is still experimental.
+
+## Licensing
+
+- **ldraw2print's code** is under the [MIT licence](LICENSE).
+- **The LDraw parts library** is not included. You download it separately,
+  and it is licensed CC BY 2.0 / CC BY 4.0 by its authors.
+- **Converted models are derived from LDraw parts.** If you share the STL or
+  3MF files, or prints made from them, credit LDraw.org and the part's
+  author. The author is on the `0 Author:` line of the part's `.dat` file.
+- **`examples/3878-print.dat`** is a corrected copy of LDraw part 3878 by
+  Chris Dee. It stays under CC BY 4.0, as its header states.
+- **`tests/fixtures/ldraw/`** holds small test parts written for this project
+  (MIT), plus a few colour definitions taken from LDraw.org's `LDConfig.ldr`.
+- **Three.js** (`assets/vendor/`) is MIT; see `assets/vendor/LICENSE-three.txt`.

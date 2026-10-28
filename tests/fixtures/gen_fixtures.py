@@ -31,7 +31,7 @@ def write(rel, lines):
 
 def header(desc, name, kind):
     return [f"0 {desc}", f"0 Name: {name}", "0 Author: ldraw2print test fixtures",
-            f"0 !LDRAW_ORG {kind}", "0 !LICENSE Licensed under CC BY 4.0", ""]
+            f"0 !LDRAW_ORG {kind}", "0 !LICENSE MIT, part of ldraw2print's test suite", ""]
 
 
 # Unit cylinder wall, y 0..1, radius 1, normals outward (CCW).

@@ -178,7 +178,22 @@ pub fn summary(out: &BuildOutput, scale: f64, show_candidates: bool) -> String {
                     );
                 }
             }
-            let _ = writeln!(s, "  Compatibility is NOT guaranteed: print `ldraw2print calibrate --connector {}` first.", c.profile);
+            match &p.calibration {
+                Some(r) => {
+                    let _ = writeln!(
+                        s,
+                        "  Calibrated  {} ({}, {}, {}:1, {}); holds for that printer, material and scale",
+                        r.result, r.printer, r.material, r.scale, r.date
+                    );
+                }
+                None => {
+                    let _ = writeln!(
+                        s,
+                        "  Compatibility is NOT guaranteed: print `ldraw2print calibrate --connector {}` first.",
+                        c.profile
+                    );
+                }
+            }
         }
     }
     s
@@ -232,7 +247,7 @@ pub fn verdict(out: &BuildOutput) -> Verdict {
     }
     if let Some(c) = &out.connector {
         if let Some(p) = &c.plan {
-            if c.fit.is_some() && p.mating_source == "nominal" {
+            if c.fit.is_some() && p.mating_source == "nominal" && p.calibration.is_none() {
                 notes.push(format!(
                     "fit for '{}' uses the nominal mating size, not a measurement; print calibration coupons to confirm",
                     c.profile

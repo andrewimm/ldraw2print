@@ -626,6 +626,8 @@ pub struct FitPlan {
     /// Vertex-circle radius that achieves the target, mm.
     pub target_vertex_radius_mm: f64,
     pub segments: u32,
+    /// The profile's calibration record, if the user has tested coupons.
+    pub calibration: Option<crate::config::CalibrationRecord>,
     pub warnings: Vec<String>,
 }
 
@@ -719,6 +721,7 @@ pub fn plan_fit(
         target_effective_diameter_mm: target,
         target_vertex_radius_mm: vertex_r,
         segments: c.segments,
+        calibration: p.calibration.clone(),
         warnings,
     })
 }

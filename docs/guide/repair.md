@@ -23,9 +23,10 @@ file they come from.
 
 Repairs (opt-in; none moves an existing vertex):
 
-- `--close-open-shells`: closes separate open pieces (caps flat openings,
-  completes convex pieces such as ribs) and anchors them into the body so
-  the slicer fuses them. Use it whenever `open-shells` is reported. Without
+- `--close-open-shells`: closes separate open pieces (caps flat openings;
+  caps any opening buried inside the body, such as leaf roots inside plant
+  stem 37695; completes convex pieces such as ribs) and anchors them into
+  the body so the slicer fuses them. Use it whenever `open-shells` is reported. Without
   it, bicorne 2528's stud-gripping ribs vanish from the slice.
 - `--fix-t-junctions`: splits faces where another vertex sits on an edge.
 - `--orient`: infers facing for non-certified geometry.

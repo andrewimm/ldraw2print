@@ -11,9 +11,11 @@ the p/48 high-resolution primitives). 96 is a good default for most parts.
 Check the result: where smoothed curves meet pieces that can't be smoothed
 (axle holes, chord pieces), smoothing can open new seams. The build reports
 this as a warning and a verdict reason ("--smooth opened N mm of new seams",
-JSON `smoothing_new_seams_mm`). On such parts build without --smooth:
-torch 3959, and pumpkin 51270, whose sliced centre tube came out garbled.
-Hats, heads and scarves tested so far add no seams.
+JSON `smoothing_new_seams_mm`). On such parts, compare with a build
+without --smooth, and check the slicer preview where the seams are. The
+seams can be harmless: on pumpkin 51270 they sit inside the axle hole and
+the slicer closes them (verified layer by layer). Hats, heads and scarves
+tested so far add no seams.
 
 What gets smoother
 

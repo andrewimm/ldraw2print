@@ -506,10 +506,15 @@ removal can't open the mesh, and exact duplicates.
   bicorne 2528's four stud-gripping ribs simply vanish from the slice. For
   every open piece except the main body, the repair:
   1. caps flat openings, or
-  2. completes the piece to its convex shape, but only when its existing
+  2. caps openings buried inside the body, whatever their shape (the leaf
+     roots of plant stem 37695 sit inside its bar). The cap is used only
+     if every opening vertex is inside or on the body and a winding-number
+     test confirms the whole cap stays inside it, so nothing visible
+     changes; or
+  3. completes the piece to its convex shape, but only when its existing
      faces lie on that shape and cover at least 60% of it, so no solid is
      invented from an open sheet; then
-  3. adds a thin hidden anchor (0.25 LDU into each side) wherever the closed
+  4. adds a thin hidden anchor (0.25 LDU into each side) wherever the closed
      piece only touches the body, so the slicer fuses them instead of
      printing separate islands. An anchor is added only after a
      winding-number test confirms it lies entirely inside the body's

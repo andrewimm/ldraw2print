@@ -1092,7 +1092,7 @@ impl RepairStep for CloseOpenShells {
                 }
             }
         }
-        let (mut capped, mut hulled, mut left) = (0, 0, 0);
+        let (mut capped, mut hulled, mut hidden, mut left) = (0, 0, 0, 0);
         let (mut flat, mut covered_n) = (0, 0);
         let mut add: Vec<Tri> = Vec::new();
         // Face outlines created here, for anchoring: (vertex ring, template).
@@ -1143,7 +1143,7 @@ impl RepairStep for CloseOpenShells {
                 // Coplanar loops nested inside another are holes of one face
                 // (e.g. the missing ring on top of a tube): cap them together.
                 for (outer, holes) in group_nested_loops(m, ls, self.tol) {
-                    all.extend(cap_planar_loop(m, &outer, &holes, self.tol, &used)?);
+                    all.extend(cap_planar_loop(m, &outer, &holes, self.tol, &used, true)?);
                 }
                 Some(all)
             });
@@ -1163,6 +1163,23 @@ impl RepairStep for CloseOpenShells {
                 }
                 add.extend(caps.into_iter().map(|v| Tri { v, ..template }));
                 capped += 1;
+                continue;
+            }
+            // An opening buried inside the main body (a leaf root inside a
+            // stem) is never seen: cap it however it projects, as long as the
+            // whole cap stays inside the body. Nothing visible changes.
+            if let Some(cs) = loops
+                .as_ref()
+                .and_then(|ls| hidden_caps(m, ls, &main_tris, self.tol, &used))
+            {
+                for t in &cs {
+                    for k in 0..3 {
+                        let (a, b) = (t[k], t[(k + 1) % 3]);
+                        used.insert((a.min(b), a.max(b)));
+                    }
+                }
+                add.extend(cs.into_iter().map(|v| Tri { v, ..template }));
+                hidden += 1;
                 continue;
             }
             if let Some((hull, rings)) = convex_completion(m, &tris, self.tol) {
@@ -1263,11 +1280,12 @@ impl RepairStep for CloseOpenShells {
         }
         RepairOutcome {
             step: self.name().into(),
-            changed: capped + hulled,
+            changed: capped + hulled + hidden,
             note: format!(
-                "closed {} open shells ({capped} by capping flat openings, {hulled} by completing convex pieces); {left} left open{}; \
+                "closed {} open shells ({capped} by capping flat openings, {hulled} by completing convex pieces, \
+                 {hidden} by capping openings hidden inside the body); {left} left open{}; \
                  added {anchors} hidden anchors fusing closed pieces to the body{}",
-                capped + hulled,
+                capped + hulled + hidden,
                 if left > 0 {
                     format!(
                         " ({flat} flat sheets, {covered_n} openings covered by another piece, {} not safely closable)",
@@ -1334,6 +1352,45 @@ fn point_tri_distance(p: Vec3, t: [Vec3; 3]) -> f64 {
 
 /// Generalised winding number of `p` with respect to triangles (≈1 inside a
 /// closed outward-oriented surface, ≈0 outside).
+/// Caps for every loop of a piece whose opening lies inside `body`: each
+/// loop vertex inside or on the body, and every cap triangle (centre and
+/// edge midpoints) inside it too. None if any loop fails.
+fn hidden_caps(
+    m: &Mesh,
+    loops: &[Vec<u32>],
+    body: &[Tri],
+    tol: f64,
+    existing: &HashSet<(u32, u32)>,
+) -> Option<Vec<[u32; 3]>> {
+    let within = |p: Vec3| {
+        winding_number(m, body, p) >= 0.5
+            || body
+                .iter()
+                .any(|t| point_tri_distance(p, m.tri_positions(t)) <= tol)
+    };
+    let mut out = Vec::new();
+    for l in loops {
+        if !l.iter().all(|&i| within(m.positions[i as usize])) {
+            return None;
+        }
+        let caps = cap_planar_loop(m, l, &[], tol, existing, false)?;
+        for t in &caps {
+            let [a, b, c] = t.map(|i| m.positions[i as usize]);
+            let samples = [
+                (a + b + c) * (1.0 / 3.0),
+                (a + b) * 0.5,
+                (b + c) * 0.5,
+                (c + a) * 0.5,
+            ];
+            if !samples.iter().all(|&p| within(p)) {
+                return None;
+            }
+        }
+        out.extend(caps);
+    }
+    Some(out)
+}
+
 fn winding_number(m: &Mesh, tris: &[Tri], p: Vec3) -> f64 {
     let mut total = 0.0;
     for t in tris {
@@ -1464,12 +1521,16 @@ fn group_nested_loops(m: &Mesh, loops: &[Vec<u32>], tol: f64) -> Vec<(Vec<u32>, 
 /// clipping on a bridged outline), wound opposite to the boundary so the cap
 /// faces outwards. None if not planar or not simple, or if a new edge would
 /// coincide with an existing one.
+/// With `planar` false the flatness check is skipped and the loop is
+/// triangulated in projection onto its best-fit plane (it must project to a
+/// simple polygon); callers must then validate the cap themselves.
 fn cap_planar_loop(
     m: &Mesh,
     l: &[u32],
     holes: &[Vec<u32>],
     tol: f64,
     existing: &HashSet<(u32, u32)>,
+    planar: bool,
 ) -> Option<Vec<[u32; 3]>> {
     if l.len() < 3 {
         return None;
@@ -1484,10 +1545,14 @@ fn cap_planar_loop(
         .iter()
         .map(|&i| (m.positions[i as usize] - ctr).length())
         .fold(0.0, f64::max);
-    if all
-        .iter()
-        .any(|&i| (m.positions[i as usize] - ctr).dot(nrm).abs() > tol.max(1e-3 * extent))
+    if planar
+        && all
+            .iter()
+            .any(|&i| (m.positions[i as usize] - ctr).dot(nrm).abs() > tol.max(1e-3 * extent))
     {
+        return None;
+    }
+    if !planar && !holes.is_empty() {
         return None;
     }
     // Cap orientation: reversed loops, in 2D with the cap's normal (-nrm).
@@ -1497,6 +1562,36 @@ fn cap_planar_loop(
         (q.dot(u), q.dot(w))
     };
     let mut ring: Vec<u32> = l.iter().rev().copied().collect();
+    if !planar {
+        // A curved loop can fold over itself in projection; refuse that.
+        let k = ring.len();
+        let o = |p: (f64, f64), q: (f64, f64), r: (f64, f64)| {
+            (q.0 - p.0) * (r.1 - p.1) - (q.1 - p.1) * (r.0 - p.0)
+        };
+        for i in 0..k {
+            for j in i + 2..k {
+                if i == 0 && j == k - 1 {
+                    continue;
+                }
+                let (a, b) = (pt2(ring[i]), pt2(ring[(i + 1) % k]));
+                let (c, d) = (pt2(ring[j]), pt2(ring[(j + 1) % k]));
+                let (d1, d2, d3, d4) = (o(c, d, a), o(c, d, b), o(a, b, c), o(a, b, d));
+                if d1 * d2 < 0.0 && d3 * d4 < 0.0 {
+                    return None;
+                }
+            }
+        }
+        // Projected winding must match the cap's orientation.
+        let area: f64 = (0..k)
+            .map(|i| {
+                let (a, b) = (pt2(ring[i]), pt2(ring[(i + 1) % k]));
+                a.0 * b.1 - b.0 * a.1
+            })
+            .sum();
+        if area <= 0.0 {
+            return None;
+        }
+    }
     // Bridge each hole (largest u first) to a visible outline vertex.
     let mut hs: Vec<Vec<u32>> = holes
         .iter()
@@ -2048,6 +2143,88 @@ pub(crate) mod tests {
             .components
             .iter()
             .all(|c| c.closed));
+    }
+
+    /// An open pyramid ("leaf") pointing out of a 10 mm cube along +X, its
+    /// open base a zigzag (non-planar) loop at x = `x0`/`x0 + 1`.
+    fn cube_with_leaf(x0: f64) -> Vec<SourceTriangle> {
+        let mut tris = cube_tris(10.0, Vec3::ZERO);
+        let ring: Vec<Vec3> = [
+            (3., 3.),
+            (5., 3.),
+            (7., 3.),
+            (7., 5.),
+            (7., 7.),
+            (5., 7.),
+            (3., 7.),
+            (3., 5.),
+        ]
+        .iter()
+        .enumerate()
+        .map(|(i, &(y, z))| Vec3::new(x0 + (i % 2) as f64, y, z))
+        .collect();
+        let apex = Vec3::new(x0 + 8.0, 5.0, 5.0);
+        for i in 0..ring.len() {
+            tris.push(SourceTriangle {
+                v: [apex, ring[i], ring[(i + 1) % ring.len()]],
+                color: 4,
+                oriented: true,
+                file: 0,
+            });
+        }
+        tris
+    }
+
+    #[test]
+    fn close_open_shells_caps_openings_hidden_inside_the_body() {
+        // The leaf's open base lies inside the cube: capping it changes
+        // nothing visible, so it is capped without moving any vertex.
+        let mut m = Mesh::from_source(&cube_with_leaf(8.0), 1e-6);
+        let before = m.positions.clone();
+        let out = run_repairs(
+            &mut m,
+            &[Box::new(CloseOpenShells {
+                tol: 1e-6,
+                anchor: 0.0,
+            })],
+        );
+        assert!(
+            out[0]
+                .note
+                .contains("1 by capping openings hidden inside the body"),
+            "{}",
+            out[0].note
+        );
+        let d = diagnose(&m, &DiagnosticOptions::default());
+        assert!(
+            d.issues
+                .iter()
+                .all(|i| !i.message.contains("open boundary")),
+            "{:?}",
+            d.issues
+        );
+        assert_eq!(m.positions, before, "no vertices added or moved");
+    }
+
+    #[test]
+    fn close_open_shells_does_not_hide_caps_outside_the_body() {
+        // Same leaf moved out of the cube: its opening would be visible, so
+        // the hidden cap must not be used.
+        let mut m = Mesh::from_source(&cube_with_leaf(11.0), 1e-6);
+        let out = run_repairs(
+            &mut m,
+            &[Box::new(CloseOpenShells {
+                tol: 1e-6,
+                anchor: 0.0,
+            })],
+        );
+        assert!(
+            out[0]
+                .note
+                .contains("0 by capping openings hidden inside the body"),
+            "{}",
+            out[0].note
+        );
     }
 
     #[test]

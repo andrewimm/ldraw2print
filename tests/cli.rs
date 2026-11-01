@@ -419,3 +419,36 @@ fn calibrate_record_writes_config_and_is_used() {
         2
     );
 }
+
+#[test]
+fn layer_check_reports_dropped_layers_and_clears_harmless_open_edges() {
+    // A box missing one side: every layer's outline is open → dropped.
+    let v = json(&cli(&["--json", "inspect", "testopenside"]));
+    let l = &v["layers"];
+    assert_eq!(l["layers"], 100);
+    assert_eq!(l["bad_layers"].as_array().unwrap().len(), 100);
+    assert_eq!(l["ranges_mm"][0][1], 20.0);
+    assert_eq!(l["max_area_at_risk_mm2"], 400.0);
+    assert_eq!(v["verdict"]["status"], "review");
+    assert!(v["verdict"]["reasons"][0]
+        .as_str()
+        .unwrap()
+        .contains("layers have open outlines"));
+    // Open edges that don't break any outline: a note, not a reason.
+    let v = json(&cli(&["--json", "inspect", "testtwosockets"]));
+    assert!(v["layers"]["bad_layers"].as_array().unwrap().is_empty());
+    assert!(v["verdict"]["notes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|n| n.as_str().unwrap().contains("every layer's outline closes")));
+    // Watertight: nothing to cut, but the layer count is still reported.
+    let v = json(&cli(&["--json", "inspect", "testhat"]));
+    assert!(v["layers"]["bad_layers"].as_array().unwrap().is_empty());
+    assert!(v["layers"]["layers"].as_u64().unwrap() > 0);
+    // Text listing.
+    let r = cli(&["inspect", "testopenside", "--layers", "--layer-height", "1"]);
+    let text = String::from_utf8_lossy(&r.stdout);
+    assert!(text.contains("Layer check (20 layers of 1 mm"), "{text}");
+    assert!(text.contains("400.0 mm² at risk"), "{text}");
+}

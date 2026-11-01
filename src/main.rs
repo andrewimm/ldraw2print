@@ -156,6 +156,9 @@ NOTES
         /// List up to N open / non-manifold edges with coordinates (mm) and source files.
         #[arg(long, value_name = "N", help_heading = "Output")]
         problems: Option<usize>,
+        /// List every layer whose outline a slicer would drop (height, open outlines, area).
+        #[arg(long, help_heading = "Layer check")]
+        layers: bool,
     },
     /// Generate test-fit coupons (rings or pins) for a connector profile.
     #[command(after_long_help = "\
@@ -406,6 +409,22 @@ struct BuildArgs {
     /// Skip the triangle–triangle intersection check (faster on big parts).
     #[arg(long, help_heading = "Mesh repair")]
     no_intersections: bool,
+    /// Layer height (mm) for the layer check, which finds layers whose outlines a slicer drops.
+    #[arg(
+        long,
+        value_name = "MM",
+        default_value_t = 0.2,
+        help_heading = "Layer check"
+    )]
+    layer_height: f64,
+    /// Largest gap (mm) a slicer bridges when joining outline ends (PrusaSlicer and its forks: about 2).
+    #[arg(
+        long,
+        value_name = "MM",
+        default_value_t = 2.0,
+        help_heading = "Layer check"
+    )]
+    closing_radius: f64,
 }
 
 fn parse_vec(s: &str) -> Result<Vec3> {
@@ -437,6 +456,8 @@ impl BuildArgs {
         o.flip = self.flip;
         o.smooth = self.smooth;
         o.close_open_shells = self.close_open_shells.then_some(true);
+        o.layer_height = self.layer_height;
+        o.closing_radius = self.closing_radius;
         if let Some(a) = &self.connector_axis {
             let range = match &self.connector_range {
                 Some(r) => {
@@ -730,6 +751,7 @@ fn build_json(out: &BuildOutput, lib: &Library, opts: &BuildOptions, cfg: &Confi
         "main_color": main_color,
         "connector_suggestions": out.connector_suggestions,
         "smoothing_new_seams_mm": out.smoothing_open_edges_added,
+        "layers": out.layers,
         "placement": { "mode": match opts.placement { Placement::Bed => "bed", Placement::Ldraw => "ldraw" }, "flip": opts.flip },
         "fit_summary": out.connector.as_ref().map(|c| {
             let (calibrated, _) = profile_status(cfg, &c.profile);
@@ -974,7 +996,11 @@ fn run(cli: Cli) -> Result<()> {
             }
             .serve(host, *port, !no_open)?;
         }
-        Cmd::Inspect { b, problems } => {
+        Cmd::Inspect {
+            b,
+            problems,
+            layers,
+        } => {
             let mut lib = make_lib(&cli, &cfg)?;
             let opts = b.options(&cfg)?;
             let out = build(&mut lib, &cfg, &opts)?;
@@ -1029,6 +1055,25 @@ fn run(cli: Cli) -> Result<()> {
             }
             if let Some(n) = problems {
                 print_problem_edges(&out.mesh, &out.files, *n);
+            }
+            if *layers {
+                let l = &out.layers;
+                println!(
+                    "\nLayer check ({} layers of {} mm, gap closing {} mm):",
+                    l.layers, l.layer_height_mm, l.closing_radius_mm
+                );
+                if l.is_clean() {
+                    println!("  every outline closes");
+                }
+                for i in &l.bad_layers {
+                    println!(
+                        "  z {:>7.2} mm  {} open outline{}  {:>8.1} mm² at risk",
+                        i.z_mm,
+                        i.open_outlines,
+                        if i.open_outlines == 1 { " " } else { "s" },
+                        i.area_at_risk_mm2
+                    );
+                }
             }
         }
         Cmd::Calibrate {

@@ -45,6 +45,11 @@ convert adds
 - `output` {path, format: stl|3mf, color_mode: paint|parts|null, bytes}
 - `filaments` [{slot, code, name, hex, triangles, area_mm2, base}] (painted 3MF only; ordered by area, slot 1 = base)
 
+Every build has `layers` {layer_height_mm, closing_radius_mm, layers,
+bad_layers [{z_mm, open_outlines, area_at_risk_mm2}], ranges_mm [[bottom, top]],
+max_area_at_risk_mm2}: layers whose outlines a slicer drops (empty when
+watertight or when every outline closes).
+
 inspect adds `files`, `uncertified_files`, `diagnostics` (counts; issues and
 components are at top level), and with
 `--problems N`: `problem_edges` {total, edges [{kind, from_mm, to_mm, files}]}

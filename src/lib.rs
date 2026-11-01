@@ -8,6 +8,7 @@ pub mod det;
 pub mod errors;
 pub mod export;
 pub mod geometry;
+pub mod layers;
 pub mod ldraw;
 pub mod mesh;
 pub mod pipeline;

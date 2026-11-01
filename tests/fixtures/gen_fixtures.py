@@ -56,6 +56,13 @@ for fc in FACES:
     box.append("4 16 " + " ".join(pt(*V[i]) for i in fc))
 write("parts/testbox.dat", box)
 
+# Box 10 LDU on a side with one vertical face missing: every layer's
+# outline is a U with a 20 mm gap at 5:1, so a slicer drops it (layer check).
+ob = header("Box missing one side (test)", "testopenside.dat", "Part") + ["0 BFC CERTIFY CCW", ""]
+for fc in FACES[:-1]:
+    ob.append("4 16 " + " ".join(pt(*[10 * c for c in V[i]]) for i in fc))
+write("parts/testopenside.dat", ob)
+
 # Same box written clockwise.
 cw = header("Box clockwise (test)", "testboxcw.dat", "Part") + ["0 BFC CERTIFY CW", ""]
 for fc in FACES:

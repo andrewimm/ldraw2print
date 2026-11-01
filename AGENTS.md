@@ -105,8 +105,11 @@ Run `ldraw2print --json inspect PART [--connector P]` first and check:
   matches. Geometric only: a hat's plume post matches `hand-grip`. Pick the
   one that matches how the part attaches (see `guide connectors`).
 - `issues[].code == "open-shells"` → add `--close-open-shells`.
-- `watertight == false` → look at `issues`; `inspect --problems 50` shows
-  where. Many official parts are open but slice fine; say so plainly.
+- `watertight == false` → read `layers`. `layers.bad_layers` empty means
+  every layer's outline closes and the part slices as modelled (say so
+  plainly). Otherwise `layers.ranges_mm` are heights where the slicer will
+  silently leave parts out: try the suggested repair, re-check, and tell the
+  user what's missing if it stays.
 - `connector.selected == null` → see `selection_error` and `candidates`.
 - `connector.plan.mating_source == "nominal"` → fit is unverified; suggest
   measuring the figure (`measured_diameter_mm`) or calibrating.

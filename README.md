@@ -554,6 +554,25 @@ leaves a surface-on-surface seam that only boolean surgery could close.
 `inspect --problems 50` shows exactly where the open edges are. Bambu
 Studio usually prints such parts acceptably, but check the sliced preview.
 
+### Layer check
+
+Open edges only matter where they break a layer's outline: a slicer chains
+each layer's cut into loops and silently drops any that don't close. Every
+build of a non-watertight mesh is cut the same way (0.2 mm layers, chain ends
+up to 2 mm apart joined, as PrusaSlicer, Bambu Studio and OrcaSlicer do), and
+the report lists the heights where material goes missing:
+
+```text
+Layers: 6 of 120 layers have open outlines a slicer drops: z 8.6–9.8 mm (up to 777.2 mm² per layer; `inspect --layers`)
+```
+
+`inspect --layers` lists every affected layer; JSON has `layers`. Outlines
+inside solid material and slivers under 1 mm wide are ignored. Checked against
+Bambu Studio on 11 parts: 98% of the outlines it flagged really were missing
+from the G-code (torch 3959's barrel, plant stem 37695's leaves, the cat tail
+15504, the trophy cup 10172's walls, …), and parts it clears slice as modelled.
+When every layer closes, "not watertight" is only a note.
+
 ## Bambu Studio workflow
 
 1. `ldraw2print convert 3624 --connector head-stud --fit clearance -o hat.stl`
@@ -791,7 +810,8 @@ To regenerate the fixtures, run `python3 tests/fixtures/gen_fixtures.py`.
   any other downward Ø12 hole, so check the selected surface.
 - Most official parts are not watertight. The tool reports this accurately
   but doesn't close holes or union shells (by design: no silent geometry
-  changes).
+  changes). The layer check says which of them actually lose material in
+  the slicer.
 - The self-intersection check reports crossing triangles but ignores
   coplanar overlaps.
 - `--primitives high` substitutes 48-segment primitives where they exist.

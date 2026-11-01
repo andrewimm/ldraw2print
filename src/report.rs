@@ -61,6 +61,31 @@ pub fn summary(out: &BuildOutput, scale: f64, show_candidates: bool) -> String {
             let _ = writeln!(s, "  {tag} {}", i.message);
         }
     }
+    if !d.watertight {
+        let l = &out.layers;
+        let _ = if !l.is_clean() {
+            writeln!(
+                s,
+                "Layers: {} of {} layers have open outlines a slicer drops: z {} (up to {} mm² per layer; `inspect --layers`)",
+                l.bad_layers.len(),
+                l.layers,
+                l.ranges_text(),
+                l.max_area_at_risk_mm2
+            )
+        } else if d.inconsistent_edges > 0 || d.nonmanifold_edges > 0 {
+            writeln!(
+                s,
+                "Layers: all {} layers' outlines chain up, but inconsistent or non-manifold edges make inside/outside unreliable",
+                l.layers
+            )
+        } else {
+            writeln!(
+                s,
+                "Layers: all {} layers ({} mm) have closed outlines; the open edges don't break any",
+                l.layers, l.layer_height_mm
+            )
+        };
+    }
     if !out.uncertified_files.is_empty() {
         let _ = writeln!(
             s,
@@ -236,11 +261,32 @@ pub fn verdict(out: &BuildOutput) -> Verdict {
     if let Some(added) = out.smoothing_open_edges_added.filter(|&a| a > 0.0) {
         reasons.push(format!("--smooth opened {added} mm of new seams on this part: build without --smooth and compare"));
     }
-    if !d.watertight {
+    let l = &out.layers;
+    if !l.is_clean() {
         reasons.push(format!(
-            "not watertight ({} open, {} non-manifold edges); many LDraw parts still slice fine, check the slicer preview or `inspect --problems 50`",
-            d.boundary_edges, d.nonmanifold_edges
+            "{} layers have open outlines that slicers drop (z {}, up to {} mm² per layer): parts of the print go missing there; \
+             try {}, or `inspect --layers` to see them",
+            l.bad_layers.len(),
+            l.ranges_text(),
+            l.max_area_at_risk_mm2,
+            if d.inconsistent_edges > 0 { "--orient (inconsistent winding breaks the outlines)" } else { "--close-open-shells" }
         ));
+    }
+    if !d.watertight {
+        // Only open edges can be harmless: non-manifold or inconsistently
+        // wound edges confuse the slicer's inside/outside even where every
+        // outline chains up.
+        if l.is_clean() && d.nonmanifold_edges == 0 && d.inconsistent_edges == 0 {
+            notes.push(format!(
+                "not watertight ({} open edges), but every layer's outline closes, so slicers print it as modelled",
+                d.boundary_edges
+            ));
+        } else {
+            reasons.push(format!(
+                "not watertight ({} open, {} non-manifold, {} inconsistently wound edges); check the slicer preview or `inspect --problems 50`",
+                d.boundary_edges, d.nonmanifold_edges, d.inconsistent_edges
+            ));
+        }
     }
     if d.intersecting_pairs.unwrap_or(0) > 0 {
         notes.push("overlapping closed pieces: slicers merge them, no action needed".into());

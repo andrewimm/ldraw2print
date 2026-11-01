@@ -1,0 +1,13 @@
+0 Box missing one side (test)
+0 Name: testopenside.dat
+0 Author: ldraw2print test fixtures
+0 !LDRAW_ORG Part
+0 !LICENSE MIT, part of ldraw2print's test suite
+
+0 BFC CERTIFY CCW
+
+4 16 0 0 0 0 10 0 10 10 0 10 0 0
+4 16 0 0 10 10 0 10 10 10 10 0 10 10
+4 16 0 0 0 10 0 0 10 0 10 0 0 10
+4 16 10 10 0 0 10 0 0 10 10 10 10 10
+4 16 10 0 0 10 10 0 10 10 10 10 0 10

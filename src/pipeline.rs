@@ -47,6 +47,10 @@ pub struct BuildOptions {
     pub smooth: Option<u32>,
     /// Close separate open shells (ribs, bosses) so slicers keep them.
     pub close_open_shells: Option<bool>,
+    /// Layer height (mm) for the layer check.
+    pub layer_height: f64,
+    /// Largest gap (mm) a slicer bridges when chaining outline ends.
+    pub closing_radius: f64,
 }
 
 impl BuildOptions {
@@ -69,6 +73,8 @@ impl BuildOptions {
             flip: false,
             smooth: None,
             close_open_shells: None,
+            layer_height: 0.2,
+            closing_radius: 2.0,
         }
     }
 }
@@ -138,6 +144,8 @@ pub struct BuildOutput {
     pub smoothing_open_edges_added: Option<f64>,
     /// Translation applied after the LDraw → print conversion (mm).
     pub placement_offset: Vec3,
+    /// Layers whose outlines a slicer would drop.
+    pub layers: crate::layers::LayerCheck,
     pub source_triangles: usize,
 }
 
@@ -388,6 +396,14 @@ pub fn build(lib: &mut Library, cfg: &Config, opt: &BuildOptions) -> Result<Buil
     };
     let diagnostics = mesh::diagnose(&mesh, &diag_opts);
     let (components, _) = mesh.components();
+    // A watertight mesh can't have open outlines; only cut the others
+    // (open, non-manifold or inconsistently wound edges all break chaining).
+    let layers = crate::layers::check(
+        &mesh,
+        opt.layer_height,
+        opt.closing_radius,
+        !diagnostics.watertight,
+    );
 
     Ok(BuildOutput {
         name: root,
@@ -406,6 +422,7 @@ pub fn build(lib: &mut Library, cfg: &Config, opt: &BuildOptions) -> Result<Buil
         connector,
         connector_suggestions,
         placement_offset: offset,
+        layers,
         smoothing_open_edges_added,
         source_triangles: resolved.triangles.len(),
     })

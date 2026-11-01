@@ -21,6 +21,26 @@ collapsed triangles.
 `inspect PART --problems 50` lists open edges with coordinates and the LDraw
 file they come from.
 
+Layer check: open edges only matter where they break a layer's outline.
+Every build of a non-watertight mesh cuts it like a slicer (0.2 mm layers,
+chain ends up to 2 mm apart joined, as PrusaSlicer, Bambu Studio and
+OrcaSlicer do) and reports layers whose outlines stay open, i.e. areas the
+slicer silently leaves out:
+
+    Layers: 6 of 120 layers have open outlines a slicer drops: z 8.6–9.8 mm (up to 777 mm² per layer)
+
+`inspect --layers` lists them; `--layer-height` / `--closing-radius` change
+the assumptions. Open outlines inside solid material, and slivers under
+1 mm wide, are ignored. Checked against Bambu Studio on 11 parts: 98% of
+flagged outlines really were dropped. When every layer closes, "not
+watertight" becomes a note: the part slices as modelled (e.g. top hat
+examples/3878-print.dat). Not covered: slicers' own extra repairs, and
+very thin walls.
+
+Known dropped regions: torch 3959 loses its barrel (even with repairs),
+plant stem 37695 its leaves without `--close-open-shells`, flower 24866 a
+1 mm band through the petals (prints/24866-print.dat is a fixed copy).
+
 Repairs (opt-in; none moves an existing vertex):
 
 - `--close-open-shells`: closes separate open pieces (caps flat openings;

@@ -263,13 +263,33 @@ pub fn verdict(out: &BuildOutput) -> Verdict {
     }
     let l = &out.layers;
     if !l.is_clean() {
+        // Suggest only repairs that haven't been tried.
+        let ran = |step: &str| out.repairs.iter().any(|r| r.step == step);
+        let mut untried: Vec<&str> = Vec::new();
+        if d.inconsistent_edges > 0 && !ran("orient") {
+            untried.push("--orient (inconsistent winding breaks the outlines)");
+        }
+        if !ran("close-open-shells") {
+            untried.push("--close-open-shells");
+        }
+        if !ran("fix-t-junctions") {
+            untried.push("--fix-t-junctions");
+        }
+        let next = if untried.is_empty() {
+            "the built-in repairs can't close them: `inspect --layers --problems 50` shows where; \
+             a small corrected .ldr (e.g. a disc over the opening) can fix it, see `guide repair`"
+                .to_string()
+        } else {
+            format!(
+                "try {}; `inspect --layers` shows them",
+                untried.join(", then ")
+            )
+        };
         reasons.push(format!(
-            "{} layers have open outlines that slicers drop (z {}, up to {} mm² per layer): parts of the print go missing there; \
-             try {}, or `inspect --layers` to see them",
+            "{} layers have open outlines that slicers drop (z {}, up to {} mm² per layer): parts of the print go missing there; {next}",
             l.bad_layers.len(),
             l.ranges_text(),
             l.max_area_at_risk_mm2,
-            if d.inconsistent_edges > 0 { "--orient (inconsistent winding breaks the outlines)" } else { "--close-open-shells" }
         ));
     }
     if !d.watertight {

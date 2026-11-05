@@ -99,6 +99,11 @@ def common(r: Run, meta: dict) -> list:
 # Per-task checks
 
 
+# "This hasn't been verified", however it's phrased.
+UNVERIFIED = (r"(not|n't|never) (yet |been |one )?(been )?(calibrat|verif|test|check|measur)"
+              r"|uncalibrat|unverified|untested|no calibration|none of .{0,60}calibrat|nominal")
+
+
 def t01_pirate_hat(r: Run, meta: dict) -> list:
     conv = r.ran(r"\bconvert\b", r"2528ap3")
     return [
@@ -108,7 +113,7 @@ def t01_pirate_hat(r: Run, meta: dict) -> list:
         ok(any("head-body" in c for c in conv), "used the head-body connector"),
         ok(any("--close-open-shells" in c for c in conv), "closed the open rib shells (--close-open-shells)"),
         ok(r.said(r"filament"), "told the user the filament order"),
-        ok(r.said(r"not (been )?calibrat|uncalibrat|no calibration|unverified|not verified|nominal"), "said the fit isn't calibrated/verified"),
+        ok(r.said(UNVERIFIED), "said the fit isn't calibrated/verified"),
         ok(any("2528ap31" in c for c in conv) or r.said(r"2528ap31|1989|classic"), "picked or discussed the 1989 classic print (2528ap31)", "warn"),
     ]
 
@@ -122,8 +127,48 @@ def t02_construction_helmet(r: Run, meta: dict) -> list:
         ok(any("head-stud" in c for c in conv), "used the head-stud connector"),
         ok(any("--fit" in c for c in conv), "applied a fit"),
         ok(r.said(r"calibrat"), "discussed the calibration status"),
-        ok(r.said(r"nominal|not measured|unverified|not verified"), "said the stud size is nominal / not verified"),
+        ok(r.said(UNVERIFIED), "said the stud size is nominal / not verified"),
     ]
+
+
+def ldr_colour(r: Run, conv: list, code: int) -> bool:
+    """A converted .ldr/.mpd written by the agent that places parts in `code`."""
+    for c in conv:
+        for name in re.findall(r"(\S+\.(?:ldr|mpd))", c):
+            p = r.dir / "work" / name
+            if p.is_file() and re.search(rf"^1 {code} ", p.read_text(errors="replace"), re.M):
+                return True
+    return False
+
+
+def final_layer_check(r: Run, cmd: str):
+    """Re-run the agent's convert command as `inspect` in its sandbox and
+    return the layer check's bad layers ([] = every layer prints), or None."""
+    import shlex
+    if "ldraw2print" not in cmd:
+        return None
+    seg = re.split(r"\s*(?:;|\||&&|2>|>)\s*", cmd[cmd.index("ldraw2print"):])[0]
+    try:
+        args = shlex.split(seg)[1:]
+    except ValueError:
+        return None
+    kept, skip = [], False
+    for a in args:
+        if skip:
+            skip = False
+        elif a in ("-o", "--output"):
+            skip = True
+        elif not a.startswith("--output=") and a != "--json":
+            kept.append(a)
+    if "convert" not in kept:
+        return None
+    kept[kept.index("convert")] = "inspect"
+    try:
+        p = subprocess.run([str((r.dir / "bin" / "ldraw2print").resolve()), "--json", *kept], cwd=r.work,
+                           capture_output=True, text=True, timeout=180)
+        return json.loads(p.stdout).get("layers", {}).get("bad_layers")
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        return None
 
 
 def t03_torch(r: Run, meta: dict) -> list:
@@ -134,12 +179,27 @@ def t03_torch(r: Run, meta: dict) -> list:
     return [
         ok(bool(r.files(".stl", ".3mf")), "wrote an output file"),
         ok(bool(conv), "converted a handheld torch (3959/86208)"),
-        ok(any(re.search(r"--color[ =]70\b", c) for c in conv), "reddish brown (--color 70)"),
+        ok(any(re.search(r"--color[ =]70\b", c) for c in conv) or ldr_colour(r, conv, 70),
+           "reddish brown (--color 70, or colour 70 in an .ldr the agent wrote)"),
         ok(any("--connector-candidate" in c for c in conv) or not any("hand-grip" in c for c in conv), "resolved the candidate choice"),
         ok(any(re.search(r"--connector-candidate[ =]3\b", c) for c in r.ran(r"3959")), "chose the grip stub (#3) on 3959", "warn"),
         ok(not smooth or r.said(r"seam"), "no --smooth, or reported the seams it opened"),
         ok(r.said(r"calibrat|coupon"), "recommended calibration for the grip"),
+        # 3959 as authored loses its barrel in the slicer; the delivered
+        # torch must print every layer, or the reply must say what's missing.
+        layer_verdict(r, conv),
     ]
+
+
+def layer_verdict(r: Run, conv: list):
+    real = [c for c in conv if re.search(r"ldraw2print\b[^;|&]*\bconvert\b", c)]
+    bad = final_layer_check(r, real[-1]) if real else None
+    if bad is None:
+        return ("warn", "couldn't re-run the final conversion's layer check")
+    lost = r"\b(missing|left out|dropp\w*|lose|loses|losing|lost|vanish\w*|disappear\w*)\b"
+    where = r"(layer|barrel|tube|slic|print)"
+    return ok(not bad or r.said(rf"{lost}.{{0,80}}{where}|{where}.{{0,80}}{lost}"),
+              "delivered torch prints every layer (or the reply says what's missing)")
 
 
 def t04_first_run(r: Run, meta: dict) -> list:
@@ -171,7 +231,7 @@ def t05_prusa_head(r: Run, meta: dict) -> list:
         ok(bool(conv), "converted a 3626 head"),
         ok(any(re.search(r"--color[ =]14\b", c) for c in conv), "yellow base (--color 14)"),
         ok(r.said(r"prusaslicer"), "addressed PrusaSlicer"),
-        ok(r.said(r"untested|unverified|(not|only) (been |yet )?(tested|verified)|(tested|verified) (only )?(in|with) bambu"), "said PrusaSlicer paint support is unverified"),
+        ok(r.said(UNVERIFIED + r"|only (been )?(tested|verified)|(tested|verified) (only )?(in|with) bambu"), "said PrusaSlicer paint support is unverified"),
         ok(r.said(r"filament|extruder|tool ?head"), "explained how to assign the two colours"),
     ]
 

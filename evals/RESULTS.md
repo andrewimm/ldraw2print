@@ -3,6 +3,27 @@
 Newest first. Record the date, tool state, model and anything learned.
 Full transcripts stay in `runs/` (not committed).
 
+## 2026-11-01, run 20261101-102233: 8/8 (after fixing four checks)
+
+First run with the layer check. Model: Claude Code default.
+
+- 03-torch: the agent saw the layer check ("the slicer would have silently
+  left out the middle of the tube at 158 layer heights"), found the open
+  handle end with `--problems` and fixed it with a two-line .ldr (3959 plus
+  one 4-4disc over the opening). Watertight; Bambu Studio now prints the
+  barrel. All three earlier torch deliveries had lost 78–158 layers; nobody
+  could tell before.
+- New 03 check: the agent's final conversion is re-run as `inspect`; its
+  layer check must be clean, or the reply must say what's missing.
+- Four checks were too literal and failed good answers: "hasn't been checked"
+  / "isn't verified" / "hasn't been tested" (01, 02, 05), and colour 70 set
+  inside the agent's own .ldr (03). Now one shared "unverified" pattern.
+- Usability reviews: five agents called the layer check useful. Two problems
+  reported, both fixed: the advice repeated `--close-open-shells` when it was
+  already on, and on torso 973 `--close-open-shells` alone went from clean to
+  98 bad layers (it capped inward-facing hole walls into inside-out shells;
+  now left open).
+
 ## 2026-10-27, run 20261027-163148: 3/3 pass (01, 03, 06)
 
 After adding `calibrate --record` and the new search ranking.

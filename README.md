@@ -521,7 +521,9 @@ removal can't open the mesh, and exact duplicates.
      material.
 
   No existing vertex moves. Pieces that can't be closed safely are left and
-  reported. Diagnostics warn about separate open shells and suggest this
+  reported, including pieces that face inwards (the wall of a hole, such as
+  torso 973's neck opening): capped, they would form an inside-out shell that
+  slicers subtract, cutting through the body. Diagnostics warn about separate open shells and suggest this
   option.
 
 Nothing closes holes, unions solids or remeshes, because any of those could

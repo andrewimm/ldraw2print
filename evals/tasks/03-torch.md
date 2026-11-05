@@ -23,4 +23,6 @@ explain.
 ## Automatic checks
 
 An output file; convert with 3959 and --connector-candidate 3; if --smooth
-was used, the report must mention seams.
+was used, the report must mention seams. The final conversion is re-run as
+`inspect`: its layer check must be clean (3959 as authored loses its barrel
+in the slicer), or the reply must say what will be missing.

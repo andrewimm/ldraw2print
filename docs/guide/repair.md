@@ -37,7 +37,18 @@ watertight" becomes a note: the part slices as modelled (e.g. top hat
 examples/3878-print.dat). Not covered: slicers' own extra repairs, and
 very thin walls.
 
-Known dropped regions: torch 3959 loses its barrel (even with repairs),
+When the built-in repairs don't close an opening, a small corrected file
+often does: an eval agent fixed torch 3959 with an .ldr holding the part plus
+one disc over the handle's open end inside the head:
+
+    0 BFC CERTIFY CCW
+    1 70 0 0 0 1 0 0 0 1 0 0 0 1 3959.dat
+    1 70 0 0 -8 4 0 0 0 0 4 0 1 0 4-4disc.dat
+
+Find the opening with `inspect --problems 50` (coordinates and source file),
+add the cap, and re-check until the layer check is clean.
+
+Known dropped regions: torch 3959 loses its barrel (even with repairs; fix above),
 plant stem 37695 its leaves without `--close-open-shells`, flower 24866 a
 1 mm band through the petals (prints/24866-print.dat is a fixed copy).
 
@@ -46,8 +57,10 @@ Repairs (opt-in; none moves an existing vertex):
 - `--close-open-shells`: closes separate open pieces (caps flat openings;
   caps any opening buried inside the body, such as leaf roots inside plant
   stem 37695; completes convex pieces such as ribs) and anchors them into
-  the body so the slicer fuses them. Use it whenever `open-shells` is reported. Without
-  it, bicorne 2528's stud-gripping ribs vanish from the slice.
+  the body so the slicer fuses them. Use it whenever `open-shells` is
+  reported. Without it, bicorne 2528's stud-gripping ribs vanish from the
+  slice. Inward-facing pieces (walls of holes) are left open: capped,
+  slicers would subtract them.
 - `--fix-t-junctions`: splits faces where another vertex sits on an edge.
 - `--orient`: infers facing for non-certified geometry.
 - Default cleanup removes collapsed and exact-duplicate triangles, and

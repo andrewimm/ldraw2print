@@ -1093,7 +1093,7 @@ impl RepairStep for CloseOpenShells {
             }
         }
         let (mut capped, mut hulled, mut hidden, mut left) = (0, 0, 0, 0);
-        let (mut flat, mut covered_n) = (0, 0);
+        let (mut flat, mut covered_n, mut inward) = (0, 0, 0);
         let mut add: Vec<Tri> = Vec::new();
         // Face outlines created here, for anchoring: (vertex ring, template).
         let mut created: Vec<(Vec<u32>, Tri)> = Vec::new();
@@ -1147,6 +1147,13 @@ impl RepairStep for CloseOpenShells {
                 }
                 Some(all)
             });
+            // A piece that closes to zero or negative volume faces inwards:
+            // it is the wall of a hole (a neck opening), not a solid. Capping
+            // it would make a closed inside-out shell that slicers subtract,
+            // cutting through the body.
+            let solid = |cs: &[[u32; 3]]| closed_volume(m, &tris, cs) > 0.0;
+            let mut inward_piece = caps.as_ref().is_some_and(|cs| !solid(cs));
+            let caps = caps.filter(|cs| solid(cs));
             if let Some(cs) = &caps {
                 for t in cs {
                     for k in 0..3 {
@@ -1171,6 +1178,11 @@ impl RepairStep for CloseOpenShells {
             if let Some(cs) = loops
                 .as_ref()
                 .and_then(|ls| hidden_caps(m, ls, &main_tris, self.tol, &used))
+                .filter(|cs| {
+                    let ok = solid(cs);
+                    inward_piece |= !ok;
+                    ok
+                })
             {
                 for t in &cs {
                     for k in 0..3 {
@@ -1180,6 +1192,11 @@ impl RepairStep for CloseOpenShells {
                 }
                 add.extend(cs.into_iter().map(|v| Tri { v, ..template }));
                 hidden += 1;
+                continue;
+            }
+            if inward_piece {
+                inward += 1;
+                left += 1;
                 continue;
             }
             if let Some((hull, rings)) = convex_completion(m, &tris, self.tol) {
@@ -1288,8 +1305,8 @@ impl RepairStep for CloseOpenShells {
                 capped + hulled + hidden,
                 if left > 0 {
                     format!(
-                        " ({flat} flat sheets, {covered_n} openings covered by another piece, {} not safely closable)",
-                        left - flat - covered_n.min(left - flat)
+                        " ({flat} flat sheets, {covered_n} openings covered by another piece, {inward} inward-facing (walls of holes), {} not safely closable)",
+                        left - flat - covered_n.min(left - flat) - inward.min(left - flat - covered_n.min(left - flat))
                     )
                 } else {
                     String::new()
@@ -1352,6 +1369,15 @@ fn point_tri_distance(p: Vec3, t: [Vec3; 3]) -> f64 {
 
 /// Generalised winding number of `p` with respect to triangles (≈1 inside a
 /// closed outward-oriented surface, ≈0 outside).
+/// Signed volume of piece `tris` closed by `caps`.
+fn closed_volume(m: &Mesh, tris: &[u32], caps: &[[u32; 3]]) -> f64 {
+    let vol = |p: [Vec3; 3]| p[0].dot(p[1].cross(p[2])) / 6.0;
+    tris.iter()
+        .map(|&t| vol(m.tri_positions(&m.tris[t as usize])))
+        .chain(caps.iter().map(|c| vol(c.map(|i| m.positions[i as usize]))))
+        .sum()
+}
+
 /// Caps for every loop of a piece whose opening lies inside `body`: each
 /// loop vertex inside or on the body, and every cap triangle (centre and
 /// edge midpoints) inside it too. None if any loop fails.
@@ -2225,6 +2251,34 @@ pub(crate) mod tests {
             "{}",
             out[0].note
         );
+    }
+
+    #[test]
+    fn close_open_shells_leaves_inward_facing_pieces_open() {
+        // The wall of a hole (faces pointing inwards, open at the top)
+        // would close into an inside-out shell that slicers subtract.
+        let mut tris = cube_tris(10.0, Vec3::ZERO);
+        tris.extend(
+            cube_tris(2.0, Vec3::new(20.0, 0.0, 0.0))
+                .into_iter()
+                .filter(|t| !t.v.iter().all(|p| (p.z - 2.0).abs() < 1e-9))
+                .map(|mut t| {
+                    t.v.swap(1, 2);
+                    t
+                }),
+        );
+        let mut m = Mesh::from_source(&tris, 1e-6);
+        let n = m.tris.len();
+        let out = run_repairs(
+            &mut m,
+            &[Box::new(CloseOpenShells {
+                tol: 1e-6,
+                anchor: 0.0,
+            })],
+        );
+        assert_eq!(out[0].changed, 0, "{}", out[0].note);
+        assert!(out[0].note.contains("1 inward-facing"), "{}", out[0].note);
+        assert_eq!(m.tris.len(), n, "nothing added");
     }
 
     #[test]
